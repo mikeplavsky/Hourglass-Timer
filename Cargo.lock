@@ -722,9 +722,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_hourglass"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "700dc4ecca5603cf570d25d4c8e64ceaf891fb79ed317f4960acc2429efcd29e"
+checksum = "1f36d0a1597c4dd71c8a4d738ca32ef64a810ba68c518f4e2753e21b467415c3"
 dependencies = [
  "bevy",
  "console_error_panic_hook",
