@@ -1,13 +1,117 @@
 use bevy::prelude::*;
+use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
 use crate::resources::{HourglassConfig, HourglassShape};
-use crate::ui::RightPanelMarker;
+
+use crate::hourglass::get_mini_shape_config;
 
 pub struct ShapePanelPlugin;
 
 impl Plugin for ShapePanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, spawn_shape_buttons)
-            .add_systems(Update, handle_shape_button_clicks);
+            .add_systems(Update, (
+                handle_shape_button_clicks,
+                update_mini_hourglass_colors,
+                handle_hover_effects,
+                update_hourglass_layering,
+                update_hover_timers,
+            ));
+    }
+}
+
+fn handle_hover_effects(
+    mut commands: Commands,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    mini_hourglass_query: Query<(Entity, &Transform, &ShapeButton), With<MiniHourglass>>,
+    hovered_query: Query<Entity, With<HoveredHourglass>>,
+) {
+    if let Ok(window) = windows.single() {
+        if let Some(cursor_position) = window.cursor_position() {
+            if let Ok((camera, camera_transform)) = camera_query.single() {
+                if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                    let mut currently_hovered = None;
+
+                    // Check if hovering over any mini hourglass
+                    for (entity, transform, _shape_button) in mini_hourglass_query.iter() {
+                        let distance = world_position.distance(transform.translation.truncate());
+
+                        // Adjust detection radius based on current scale
+                        let detection_radius = 30.0 * transform.scale.x;
+
+                        if distance < detection_radius {
+                            currently_hovered = Some(entity);
+                            break;
+                        }
+                    }
+
+                    // Remove HoveredHourglass from all entities that are no longer hovered
+                    for hovered_entity in hovered_query.iter() {
+                        if Some(hovered_entity) != currently_hovered {
+                            commands.entity(hovered_entity).remove::<HoveredHourglass>();
+                        }
+                    }
+
+                    // Add HoveredHourglass to currently hovered entity if it doesn't have it
+                    if let Some(hovered_entity) = currently_hovered {
+                        if !hovered_query.contains(hovered_entity) {
+                            commands.entity(hovered_entity).insert(HoveredHourglass { timer: 0.0 });
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn update_hourglass_layering(
+    config: Res<HourglassConfig>,
+    time: Res<Time>,
+    mut mini_hourglass_query: Query<(&mut Transform, &MiniHourglass, &ShapeButton, Option<&HoveredHourglass>)>,
+) {
+    for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
+        let base_position = mini_hourglass.base_position;
+
+        // Visual effects with scaling only
+        let scale = if let Some(_hover_component) = hovered {
+            // Hovered state: larger scale
+            1.3
+        } else if config.shape_type == shape_button.shape {
+            // Selected state: slightly larger
+            1.15
+        } else {
+            // Default state
+            1.0
+        };
+
+        // Apply scale
+        transform.scale = Vec3::splat(scale);
+
+        // Keep original position
+        transform.translation = base_position;
+    }
+}
+
+fn update_hover_timers(
+    time: Res<Time>,
+    mut hovered_query: Query<&mut HoveredHourglass>,
+) {
+    for mut hovered in hovered_query.iter_mut() {
+        hovered.timer += time.delta_secs();
+
+        // Optional: Remove hover effect after some time if desired
+        // For now, we'll keep it until the mouse moves away
+    }
+}
+
+fn update_mini_hourglass_colors(
+    config: Res<HourglassConfig>,
+    mut query: Query<&mut Hourglass, With<MiniHourglass>>,
+) {
+    if config.is_changed() {
+        for mut hourglass in query.iter_mut() {
+            hourglass.sand_color = config.color;
+        }
     }
 }
 
@@ -18,106 +122,87 @@ struct ShapeButton {
     shape: HourglassShape,
 }
 
+#[derive(Component)]
+struct MiniHourglass {
+    base_position: Vec3, // Store the original position
+}
+
+#[derive(Component)]
+struct HoveredHourglass {
+    timer: f32, // Timer for hover effect duration
+}
+
 fn spawn_shape_buttons(
     mut commands: Commands,
-    query: Query<Entity, With<RightPanelMarker>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    config: Res<HourglassConfig>,
 ) {
-    // Find the right panel container
-    if let Ok(entity) = query.single() {
-            commands.entity(entity).with_children(|parent| {
-                // Add a label
-                parent.spawn((
-                    Text::new("Shapes"),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                    Node {
-                        margin: UiRect::bottom(Val::Px(10.0)),
-                        ..default()
-                    },
-                ));
+    // Spawn mini hourglasses in 3D space positioned in the right panel area
+    let shapes = [
+        HourglassShape::Classic,
+        HourglassShape::Modern,
+        HourglassShape::Slim,
+        HourglassShape::Wide,
+    ];
 
-                // Add shape buttons with placeholder mini-hourglasses
-                let shapes = [
-                    (HourglassShape::Classic, "Classic"),
-                    (HourglassShape::Modern, "Modern"),
-                    (HourglassShape::Slim, "Slim"),
-                    (HourglassShape::Wide, "Wide"),
-                ];
+    for (i, shape) in shapes.iter().enumerate() {
+        // Position them in a visible area on the right side
+        // Start closer to center and move right
+        let x_pos = 500.0; // Position on right side but definitely visible
+        let y_pos = 100.0 - (i as f32 * 60.0); // Spaced vertically, starting from top
 
-                for (shape, label) in shapes {
-                    parent.spawn((
-                        Name::new(format!("Shape Button {}", label)),
-                        ShapeButton { shape },
-                        Button,
-                        Node {
-                            width: Val::Px(60.0),
-                            height: Val::Px(80.0),
-                            margin: UiRect::all(Val::Px(5.0)),
-                            border: UiRect::all(Val::Px(2.0)),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-                        BorderColor(Color::WHITE),
-                    )).with_children(|parent| {
-                        // Placeholder hourglass representation (temporary - we'll add real mini-hourglasses later)
-                        parent.spawn((
-                            Node {
-                                width: Val::Px(30.0),
-                                height: Val::Px(40.0),
-                                margin: UiRect::bottom(Val::Px(5.0)),
-                                ..default()
-                            },
-                            BackgroundColor(match shape {
-                                HourglassShape::Classic => Color::srgb(0.6, 0.5, 0.3),
-                                HourglassShape::Modern => Color::srgb(0.3, 0.5, 0.6),
-                                HourglassShape::Slim => Color::srgb(0.5, 0.3, 0.6),
-                                HourglassShape::Wide => Color::srgb(0.6, 0.3, 0.3),
-                            }),
-                        ));
+        let (body_config, plates_config) = get_mini_shape_config(*shape);
 
-                        // Label
-                        parent.spawn((
-                            Text::new(label),
-                            TextFont {
-                                font_size: 12.0,
-                                ..default()
-                            },
-                            TextColor(Color::WHITE),
-                        ));
-                    });
-                }
-            });
+        let base_z = 10.0; // Start with elevated base position
+        let position = Vec3::new(x_pos, y_pos, base_z);
+
+        let entity = HourglassMeshBuilder::new(Transform::from_translation(position))
+            .with_body(body_config)
+            .with_plates(plates_config)
+            .with_sand(HourglassMeshSandConfig {
+                color: config.color,
+                fill_percent: 0.7, // Partially filled for visual appeal
+                wall_offset: 1.0,
+            })
+            .build(&mut commands, &mut meshes, &mut materials);
+
+        commands.entity(entity).insert((
+            MiniHourglass {
+                base_position: position,
+            },
+            ShapeButton { shape: *shape }, // Make it clickable
+            Name::new(format!("Mini Hourglass {:?}", shape)),
+        ));
     }
 }
 
 fn handle_shape_button_clicks(
-    mut interaction_query: Query<
-        (&Interaction, &ShapeButton, &mut BorderColor),
-        (Changed<Interaction>, With<Button>),
-    >,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    mini_hourglass_query: Query<(&Transform, &ShapeButton), With<MiniHourglass>>,
     mut config: ResMut<HourglassConfig>,
 ) {
-    for (interaction, shape_button, mut border_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                config.shape_type = shape_button.shape;
-                *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
-            }
-            Interaction::Hovered => {
-                *border_color = BorderColor(Color::srgb(0.8, 0.8, 0.8));
-            }
-            Interaction::None => {
-                // Highlight selected shape
-                if config.shape_type == shape_button.shape {
-                    *border_color = BorderColor(Color::srgb(0.0, 0.8, 0.0));
-                } else {
-                    *border_color = BorderColor(Color::WHITE);
+    if mouse_input.just_pressed(MouseButton::Left) {
+        if let Ok(window) = windows.single() {
+            if let Some(cursor_position) = window.cursor_position() {
+                if let Ok((camera, camera_transform)) = camera_query.single() {
+                    // Convert screen coordinates to world coordinates
+                    if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                        // Check if click is near any mini hourglass
+                        for (transform, shape_button) in mini_hourglass_query.iter() {
+                            let distance = world_position.distance(transform.translation.truncate());
+
+                            // Adjust click detection radius based on current scale
+                            let click_radius = 30.0 * transform.scale.x;
+
+                            if distance < click_radius {
+                                config.shape_type = shape_button.shape;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }

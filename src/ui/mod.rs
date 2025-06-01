@@ -99,7 +99,7 @@ fn setup_ui_layout(mut commands: Commands) {
                 BackgroundColor(Color::NONE),
             ));
 
-            // Right panel container
+            // Right panel container - made transparent to not block 3D hourglasses
             parent.spawn((
                 Name::new("Right Panel Container"),
                 RightPanelMarker,
@@ -113,7 +113,7 @@ fn setup_ui_layout(mut commands: Commands) {
                     padding: UiRect::all(Val::Px(10.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.15, 0.15, 0.15, 0.9)),
+                BackgroundColor(Color::NONE), // Transparent to not block 3D hourglasses
             ));
         });
     });

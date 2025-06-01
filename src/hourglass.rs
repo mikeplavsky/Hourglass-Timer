@@ -113,6 +113,100 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
     }
 }
 
+// Helper function to create mini hourglass configurations for different shapes (for UI panels)
+pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
+    let base_height = 40.0; // Smaller size for mini hourglasses
+
+    match shape {
+        HourglassShape::Classic => (
+            HourglassMeshBodyConfig {
+                total_height: base_height,
+                bulb_style: BulbStyle::Circular {
+                    curvature: 1.0,
+                    width_factor: 1.0,
+                    curve_resolution: 12, // Lower resolution for performance
+                },
+                neck_style: NeckStyle::Curved {
+                    curvature: 1.0,
+                    width: 3.0,
+                    height: 4.0,
+                    curve_resolution: 6,
+                },
+                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+            },
+            HourglassMeshPlatesConfig {
+                width: 30.0,
+                height: 2.0,
+                color: Color::srgb(0.6, 0.4, 0.2),
+            }
+        ),
+        HourglassShape::Modern => (
+            HourglassMeshBodyConfig {
+                total_height: base_height,
+                bulb_style: BulbStyle::Circular {
+                    curvature: 0.3,
+                    width_factor: 0.9,
+                    curve_resolution: 10,
+                },
+                neck_style: NeckStyle::Straight {
+                    width: 2.5,
+                    height: 6.0,
+                },
+                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+            },
+            HourglassMeshPlatesConfig {
+                width: 28.0,
+                height: 2.5,
+                color: Color::srgb(0.4, 0.4, 0.6),
+            }
+        ),
+        HourglassShape::Slim => (
+            HourglassMeshBodyConfig {
+                total_height: base_height * 1.2,
+                bulb_style: BulbStyle::Circular {
+                    curvature: 1.2,
+                    width_factor: 0.7,
+                    curve_resolution: 10,
+                },
+                neck_style: NeckStyle::Curved {
+                    curvature: 1.5,
+                    width: 2.0,
+                    height: 5.0,
+                    curve_resolution: 5,
+                },
+                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+            },
+            HourglassMeshPlatesConfig {
+                width: 22.0,
+                height: 1.5,
+                color: Color::srgb(0.5, 0.3, 0.6),
+            }
+        ),
+        HourglassShape::Wide => (
+            HourglassMeshBodyConfig {
+                total_height: base_height * 0.8,
+                bulb_style: BulbStyle::Circular {
+                    curvature: 0.8,
+                    width_factor: 1.3,
+                    curve_resolution: 14,
+                },
+                neck_style: NeckStyle::Curved {
+                    curvature: 0.7,
+                    width: 4.0,
+                    height: 3.0,
+                    curve_resolution: 7,
+                },
+                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+            },
+            HourglassMeshPlatesConfig {
+                width: 38.0,
+                height: 3.0,
+                color: Color::srgb(0.6, 0.3, 0.3),
+            }
+        ),
+    }
+}
+
 fn spawn_hourglass(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
