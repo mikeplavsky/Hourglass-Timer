@@ -1,7 +1,13 @@
 // Support configuring Bevy lints within code.
 #![cfg_attr(bevy_lint, feature(register_tool), register_tool(bevy))]
 
+mod hourglass;
+mod resources;
+mod timer;
+mod ui;
+
 use bevy::prelude::*;
+use resources::{HourglassConfig, TimerState};
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -24,6 +30,17 @@ impl Plugin for AppPlugin {
                     ..default()
                 }),
         );
+
+        // Initialize resources
+        app.init_resource::<HourglassConfig>()
+            .init_resource::<TimerState>();
+
+        // Add our custom plugins
+        app.add_plugins((
+            hourglass::HourglassPlugin,
+            timer::TimerPlugin,
+            ui::UIPlugin,
+        ));
 
         // Spawn the main camera.
         app.add_systems(Startup, spawn_camera);
