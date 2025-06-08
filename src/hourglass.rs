@@ -227,7 +227,10 @@ fn spawn_hourglass(
             fill_percent: 0.0, // Start with bottom bulb filled (empty top)
             wall_offset: 4.0,
         })
-        .with_sand_splash(SandSplashConfig::default())
+        .with_sand_splash(SandSplashConfig {
+            particle_color: config.color,
+            ..Default::default()
+        })
         .with_timing(timer_state.duration)
         .build(&mut commands, &mut meshes, &mut materials);
     commands.entity(entity).insert((MainHourglass, Name::new("Main Hourglass")));
@@ -274,7 +277,10 @@ fn update_hourglass_shape(
                 fill_percent: 0.0, // Start with bottom bulb filled (empty top)
                 wall_offset: 4.0,
             })
-            .with_sand_splash(SandSplashConfig::default())
+            .with_sand_splash(SandSplashConfig {
+                particle_color: config.color,
+                ..Default::default()
+            })
             .with_timing(timer_state.duration)
             .build(&mut commands, &mut meshes, &mut materials);
         commands.entity(entity).insert((MainHourglass, Name::new("Main Hourglass")));

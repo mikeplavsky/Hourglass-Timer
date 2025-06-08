@@ -19,10 +19,10 @@ fn spawn_pause_overlay(mut commands: Commands) {
         PauseOverlay,
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(50.0),
-            width: Val::Px(400.0),
-            height: Val::Px(400.0),
+            left: Val::Percent(0.0),
+            top: Val::Percent(0.0),
+            width: Val::Px(200.0),
+            height: Val::Px(100.0),
             display: Display::None, // Start hidden
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
