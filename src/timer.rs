@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::resources::TimerState;
+use bevy::prelude::*;
 
 pub struct TimerPlugin;
 
@@ -9,10 +9,7 @@ impl Plugin for TimerPlugin {
     }
 }
 
-fn update_timer(
-    time: Res<Time>,
-    mut timer_state: ResMut<TimerState>,
-) {
+fn update_timer(time: Res<Time>, mut timer_state: ResMut<TimerState>) {
     if timer_state.is_running && timer_state.remaining > 0.0 {
         timer_state.remaining -= time.delta_secs();
 

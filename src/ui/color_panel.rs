@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use crate::resources::{HourglassConfig, COLOR_PALETTE};
+use crate::resources::{COLOR_PALETTE, HourglassConfig};
 use crate::ui::ColorRowMarker;
+use bevy::prelude::*;
 
 pub struct ColorPanelPlugin;
 
@@ -16,10 +16,7 @@ struct ColorButton {
     color: Color,
 }
 
-fn spawn_color_buttons(
-    mut commands: Commands,
-    query: Query<Entity, With<ColorRowMarker>>,
-) {
+fn spawn_color_buttons(mut commands: Commands, query: Query<Entity, With<ColorRowMarker>>) {
     // Find the color row container
     if let Ok(panel_entity) = query.single() {
         commands.entity(panel_entity).with_children(|parent| {

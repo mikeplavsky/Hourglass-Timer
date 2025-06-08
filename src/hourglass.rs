@@ -1,6 +1,9 @@
-use bevy::prelude::*;
-use bevy_hourglass::{BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig, HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplashConfig};
 use crate::resources::{HourglassConfig, HourglassShape, TimerState};
+use bevy::prelude::*;
+use bevy_hourglass::{
+    BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
+    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplashConfig,
+};
 
 pub struct HourglassPlugin;
 
@@ -8,13 +11,16 @@ impl Plugin for HourglassPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(BevyHourglassPlugin)
             .add_systems(Startup, spawn_hourglass)
-            .add_systems(Update, (
-                update_hourglass_color,
-                update_hourglass_timer,
-                update_hourglass_shape,
-                handle_hourglass_click,
-                handle_timer_start,
-            ));
+            .add_systems(
+                Update,
+                (
+                    update_hourglass_color,
+                    update_hourglass_timer,
+                    update_hourglass_shape,
+                    handle_hourglass_click,
+                    handle_timer_start,
+                ),
+            );
     }
 }
 
@@ -39,7 +45,9 @@ impl DragState {
 }
 
 // Helper function to create main hourglass configurations for different shapes
-fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
+fn get_main_shape_config(
+    shape: HourglassShape,
+) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
     let base_height = 400.0; // Full size for main hourglass
 
     match shape {
@@ -63,7 +71,7 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 width: 400.0,
                 height: 10.0,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Modern => (
             HourglassMeshBodyConfig {
@@ -83,7 +91,7 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 width: 380.0,
                 height: 12.0,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Slim => (
             HourglassMeshBodyConfig {
@@ -105,7 +113,7 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 width: 340.0, // Narrower plates
                 height: 8.0,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Wide => (
             HourglassMeshBodyConfig {
@@ -127,13 +135,15 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 width: 390.0, // Wider plates
                 height: 14.0,
                 ..Default::default()
-            }
+            },
         ),
     }
 }
 
 // Helper function to create mini hourglass configurations for different shapes (for UI panels)
-pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
+pub fn get_mini_shape_config(
+    shape: HourglassShape,
+) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
     let base_height = 25.0; // Smaller size for mini hourglasses
 
     match shape {
@@ -157,7 +167,7 @@ pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig,
                 width: 25.0,
                 height: 2.0,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Modern => (
             HourglassMeshBodyConfig {
@@ -177,7 +187,7 @@ pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig,
                 width: 22.0,
                 height: 2.5,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Slim => (
             HourglassMeshBodyConfig {
@@ -199,7 +209,7 @@ pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig,
                 width: 20.0,
                 height: 1.5,
                 ..Default::default()
-            }
+            },
         ),
         HourglassShape::Wide => (
             HourglassMeshBodyConfig {
@@ -221,7 +231,7 @@ pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig,
                 width: 28.0,
                 height: 3.0,
                 ..Default::default()
-            }
+            },
         ),
     }
 }
@@ -252,7 +262,9 @@ fn spawn_hourglass(
         })
         .with_timing(timer_state.duration)
         .build(&mut commands, &mut meshes, &mut materials);
-    commands.entity(entity).insert((MainHourglass, DragState::new(), Name::new("Main Hourglass")));
+    commands
+        .entity(entity)
+        .insert((MainHourglass, DragState::new(), Name::new("Main Hourglass")));
 }
 
 fn update_hourglass_color(
@@ -304,7 +316,11 @@ fn update_hourglass_shape(
             })
             .with_timing(timer_state.duration)
             .build(&mut commands, &mut meshes, &mut materials);
-        commands.entity(entity).insert((MainHourglass, DragState::new(), Name::new("Main Hourglass")));
+        commands.entity(entity).insert((
+            MainHourglass,
+            DragState::new(),
+            Name::new("Main Hourglass"),
+        ));
     }
 }
 
@@ -322,7 +338,7 @@ fn update_hourglass_timer(
             if timer_state.is_running && !hourglass.flipping {
                 // When timer is running and not currently flipping, sand flows from top to bottom
                 let progress = timer_state.remaining / timer_state.duration;
-                hourglass.upper_chamber = progress;        // Full when time remaining
+                hourglass.upper_chamber = progress; // Full when time remaining
                 hourglass.lower_chamber = 1.0 - progress; // Empty when time remaining
             } else if !timer_state.is_running {
                 // When timer is not running, only reset to initial state if timer is at full duration (not started or reset)
@@ -348,14 +364,19 @@ fn handle_hourglass_click(
     if let Ok(window) = windows.single() {
         if let Some(cursor_position) = window.cursor_position() {
             if let Ok((camera, camera_transform)) = camera_query.single() {
-                if let Ok((hourglass_transform, mut drag_state, mut hourglass)) = hourglass_query.single_mut() {
+                if let Ok((hourglass_transform, mut drag_state, mut hourglass)) =
+                    hourglass_query.single_mut()
+                {
                     // Convert screen coordinates to world coordinates
-                    if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                    if let Ok(world_position) =
+                        camera.viewport_to_world_2d(camera_transform, cursor_position)
+                    {
                         // Check if interaction is within hourglass bounds (approximate 400x400 area)
                         let hourglass_pos = hourglass_transform.translation.truncate();
                         let distance = world_position.distance(hourglass_pos);
 
-                        if distance < 400.0 { // Larger area to cover most of the hourglass
+                        if distance < 400.0 {
+                            // Larger area to cover most of the hourglass
                             // Handle mouse down - start potential drag
                             if mouse_input.just_pressed(MouseButton::Left) {
                                 drag_state.start_position = cursor_position;
@@ -364,7 +385,8 @@ fn handle_hourglass_click(
 
                             // Handle mouse movement during press - detect drag
                             if mouse_input.pressed(MouseButton::Left) && !drag_state.is_dragging {
-                                let drag_distance = cursor_position.distance(drag_state.start_position);
+                                let drag_distance =
+                                    cursor_position.distance(drag_state.start_position);
                                 if drag_distance > drag_state.drag_threshold {
                                     drag_state.is_dragging = true;
                                 }

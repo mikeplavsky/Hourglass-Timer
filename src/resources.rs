@@ -68,12 +68,12 @@ impl TimerState {
 
 // Color palette for the color selector
 pub const COLOR_PALETTE: &[Color] = &[
-    Color::srgb(0.0, 0.0, 0.0),  // Black
-    Color::srgb(1.0, 1.0, 1.0),  // White
-    Color::srgb(0.1, 0.3, 0.8),  // Blue
-    Color::srgb(0.8, 0.2, 0.2),  // Red
-    Color::srgb(0.7, 0.1, 0.8),  // Purple
-    Color::srgb(0.1, 0.5, 0.1),  // Green
-    Color::srgb(0.8, 0.8, 0.2),  // Yellow
-    Color::srgb(0.8, 0.4, 0.0),  // Orange
+    Color::srgb(0.0, 0.0, 0.0), // Black
+    Color::srgb(1.0, 1.0, 1.0), // White
+    Color::srgb(0.1, 0.3, 0.8), // Blue
+    Color::srgb(0.8, 0.2, 0.2), // Red
+    Color::srgb(0.7, 0.1, 0.8), // Purple
+    Color::srgb(0.1, 0.5, 0.1), // Green
+    Color::srgb(0.8, 0.8, 0.2), // Yellow
+    Color::srgb(0.8, 0.4, 0.0), // Orange
 ];

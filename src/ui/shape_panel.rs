@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
 use crate::resources::{HourglassConfig, HourglassShape};
 use crate::ui::ShapeRowMarker;
+use bevy::prelude::*;
+use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
 
 use crate::hourglass::get_mini_shape_config;
 
@@ -10,14 +10,17 @@ pub struct ShapePanelPlugin;
 impl Plugin for ShapePanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, spawn_shape_buttons)
-            .add_systems(Update, (
-                handle_shape_button_clicks,
-                update_mini_hourglass_colors,
-                handle_hover_effects,
-                update_hourglass_layering,
-                update_hover_timers,
-                update_mini_hourglass_positions,
-            ));
+            .add_systems(
+                Update,
+                (
+                    handle_shape_button_clicks,
+                    update_mini_hourglass_colors,
+                    handle_hover_effects,
+                    update_hourglass_layering,
+                    update_hover_timers,
+                    update_mini_hourglass_positions,
+                ),
+            );
     }
 }
 
@@ -31,7 +34,9 @@ fn handle_hover_effects(
     if let Ok(window) = windows.single() {
         if let Some(cursor_position) = window.cursor_position() {
             if let Ok((camera, camera_transform)) = camera_query.single() {
-                if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                if let Ok(world_position) =
+                    camera.viewport_to_world_2d(camera_transform, cursor_position)
+                {
                     let mut currently_hovered = None;
 
                     // Check if hovering over any mini hourglass
@@ -57,7 +62,9 @@ fn handle_hover_effects(
                     // Add HoveredHourglass to currently hovered entity if it doesn't have it
                     if let Some(hovered_entity) = currently_hovered {
                         if !hovered_query.contains(hovered_entity) {
-                            commands.entity(hovered_entity).insert(HoveredHourglass { timer: 0.0 });
+                            commands
+                                .entity(hovered_entity)
+                                .insert(HoveredHourglass { timer: 0.0 });
                         }
                     }
                 }
@@ -68,7 +75,12 @@ fn handle_hover_effects(
 
 fn update_hourglass_layering(
     config: Res<HourglassConfig>,
-    mut mini_hourglass_query: Query<(&mut Transform, &MiniHourglass, &ShapeButton, Option<&HoveredHourglass>)>,
+    mut mini_hourglass_query: Query<(
+        &mut Transform,
+        &MiniHourglass,
+        &ShapeButton,
+        Option<&HoveredHourglass>,
+    )>,
 ) {
     for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
         let base_position = mini_hourglass.base_position;
@@ -93,10 +105,7 @@ fn update_hourglass_layering(
     }
 }
 
-fn update_hover_timers(
-    time: Res<Time>,
-    mut hovered_query: Query<&mut HoveredHourglass>,
-) {
+fn update_hover_timers(time: Res<Time>, mut hovered_query: Query<&mut HoveredHourglass>) {
     for mut hovered in hovered_query.iter_mut() {
         hovered.timer += time.delta_secs();
 
@@ -136,14 +145,16 @@ fn update_mini_hourglass_positions(
                 // Convert screen space to world space for the shape row center
                 let shape_row_screen_pos = Vec2::new(window_width / 2.0, shape_row_center_y);
 
-                if let Ok(shape_row_world_pos) = camera.viewport_to_world_2d(camera_transform, shape_row_screen_pos) {
+                if let Ok(shape_row_world_pos) =
+                    camera.viewport_to_world_2d(camera_transform, shape_row_screen_pos)
+                {
                     // Update each mini hourglass position relative to the shape row
                     for (mut transform, mut mini_hourglass) in mini_hourglass_query.iter_mut() {
                         // Calculate new position based on original X offset from center
                         let new_position = Vec3::new(
                             shape_row_world_pos.x + mini_hourglass.original_x,
                             shape_row_world_pos.y,
-                            10.0 // Keep elevated Z position
+                            10.0, // Keep elevated Z position
                         );
 
                         // Update both current transform and stored base position
@@ -156,8 +167,6 @@ fn update_mini_hourglass_positions(
     }
 }
 
-
-
 #[derive(Component)]
 struct ShapeButton {
     shape: HourglassShape,
@@ -166,7 +175,7 @@ struct ShapeButton {
 #[derive(Component)]
 struct MiniHourglass {
     base_position: Vec3, // Store the original position
-    original_x: f32, // Store the original X position for positioning
+    original_x: f32,     // Store the original X position for positioning
 }
 
 #[derive(Component)]
@@ -233,10 +242,13 @@ fn handle_shape_button_clicks(
             if let Some(cursor_position) = window.cursor_position() {
                 if let Ok((camera, camera_transform)) = camera_query.single() {
                     // Convert screen coordinates to world coordinates
-                    if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                    if let Ok(world_position) =
+                        camera.viewport_to_world_2d(camera_transform, cursor_position)
+                    {
                         // Check if click is near any mini hourglass
                         for (transform, shape_button) in mini_hourglass_query.iter() {
-                            let distance = world_position.distance(transform.translation.truncate());
+                            let distance =
+                                world_position.distance(transform.translation.truncate());
 
                             // Adjust click detection radius based on current scale
                             let click_radius = 30.0 * transform.scale.x;

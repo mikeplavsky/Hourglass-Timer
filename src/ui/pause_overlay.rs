@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::resources::TimerState;
+use bevy::prelude::*;
 
 pub struct PauseOverlayPlugin;
 
@@ -15,35 +15,37 @@ struct PauseOverlay;
 
 fn spawn_pause_overlay(mut commands: Commands) {
     // Create a full-screen overlay positioned over the hourglass
-    commands.spawn((
-        PauseOverlay,
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Percent(0.0),
-            top: Val::Percent(0.0),
-            width: Val::Px(200.0),
-            height: Val::Px(100.0),
-            display: Display::None, // Start hidden
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)), // Semi-transparent black background
-        ZIndex(100), // Ensure it appears above the hourglass
-    )).with_children(|parent| {
-        parent.spawn((
-            Text::new("PAUSED"),
-            TextFont {
-                font_size: 48.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
+    commands
+        .spawn((
+            PauseOverlay,
             Node {
-                // Center the text within the overlay
+                position_type: PositionType::Absolute,
+                left: Val::Percent(0.0),
+                top: Val::Percent(0.0),
+                width: Val::Px(200.0),
+                height: Val::Px(100.0),
+                display: Display::None, // Start hidden
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
                 ..default()
             },
-        ));
-    });
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)), // Semi-transparent black background
+            ZIndex(100), // Ensure it appears above the hourglass
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("PAUSED"),
+                TextFont {
+                    font_size: 48.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Node {
+                    // Center the text within the overlay
+                    ..default()
+                },
+            ));
+        });
 }
 
 fn update_pause_overlay_visibility(

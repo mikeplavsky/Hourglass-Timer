@@ -62,6 +62,29 @@ default-features = false
 [package.metadata.bevy_cli.web.dev]
 features = ["dev"]
 
+# Enable proper WASM support with specific features
+[target.wasm32-unknown-unknown.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+bevy = { version = "0.16", default-features = false, features = [
+    "animation",
+    "bevy_asset",
+    "bevy_color",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_pbr",
+    "bevy_render",
+    "bevy_scene",
+    "bevy_sprite",
+    "bevy_state",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_winit",
+    "png",
+    "hdr",
+    "default_font",
+    "webgl2",
+] }
+
 
 [lints.rust]
 # Mark `bevy_lint` as a valid `cfg`, as it is set when the Bevy linter runs.

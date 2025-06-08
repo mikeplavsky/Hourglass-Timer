@@ -19,16 +19,15 @@ impl Plugin for AppPlugin {
     fn build(&self, app: &mut App) {
         // Add Bevy plugins.
         app.add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Window {
-                        title: "Hourglass Timer".to_string(),
-                        fit_canvas_to_parent: true,
-                        ..default()
-                    }
-                    .into(),
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Window {
+                    title: "Hourglass Timer".to_string(),
+                    fit_canvas_to_parent: true,
                     ..default()
-                }),
+                }
+                .into(),
+                ..default()
+            }),
         );
 
         // Initialize resources
@@ -36,11 +35,7 @@ impl Plugin for AppPlugin {
             .init_resource::<TimerState>();
 
         // Add our custom plugins
-        app.add_plugins((
-            hourglass::HourglassPlugin,
-            timer::TimerPlugin,
-            ui::UIPlugin,
-        ));
+        app.add_plugins((hourglass::HourglassPlugin, timer::TimerPlugin, ui::UIPlugin));
 
         // Spawn the main camera.
         app.add_systems(Startup, spawn_camera);

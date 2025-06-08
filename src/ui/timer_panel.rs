@@ -1,20 +1,23 @@
-use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::prelude::*;
 use crate::resources::TimerState;
 use crate::ui::{BottomTimerMarker, TimerPanelVisible};
+use bevy::ecs::relationship::RelatedSpawnerCommands;
+use bevy::prelude::*;
 
 pub struct TimerPanelPlugin;
 
 impl Plugin for TimerPanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, spawn_timer_controls)
-            .add_systems(Update, (
-                handle_timer_buttons,
-                update_time_display,
-                handle_control_buttons,
-                handle_toggle_button,
-                update_timer_panel_visibility,
-            ));
+            .add_systems(
+                Update,
+                (
+                    handle_timer_buttons,
+                    update_time_display,
+                    handle_control_buttons,
+                    handle_toggle_button,
+                    update_timer_panel_visibility,
+                ),
+            );
     }
 }
 
@@ -41,254 +44,267 @@ struct ToggleButton;
 #[derive(Component)]
 struct TimerControlsContainer;
 
-fn spawn_timer_controls(
-    mut commands: Commands,
-    query: Query<Entity, With<BottomTimerMarker>>,
-) {
+fn spawn_timer_controls(mut commands: Commands, query: Query<Entity, With<BottomTimerMarker>>) {
     // Find the bottom timer container
     if let Ok(panel_entity) = query.single() {
         commands.entity(panel_entity).with_children(|parent| {
             // Toggle button (always visible)
-            parent.spawn((
-                ToggleButton,
-                Button,
-                Node {
-                    width: Val::Px(130.0),
-                    height: Val::Px(30.0),
-                    margin: UiRect::all(Val::Px(5.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.4, 0.4, 0.4)),
-                BorderColor(Color::WHITE),
-            )).with_children(|parent| {
-                parent.spawn((
-                    Text::new("Timer Controls"),
-                    TextFont {
-                        font_size: 14.0,
+            parent
+                .spawn((
+                    ToggleButton,
+                    Button,
+                    Node {
+                        width: Val::Px(130.0),
+                        height: Val::Px(30.0),
+                        margin: UiRect::all(Val::Px(5.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
                         ..default()
                     },
-                    TextColor(Color::WHITE),
-                ));
-            });
+                    BackgroundColor(Color::srgb(0.4, 0.4, 0.4)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Timer Controls"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
 
             // Timer controls container (initially hidden)
-            parent.spawn((
-                TimerControlsContainer,
-                Node {
-                    width: Val::Percent(100.0),
-                    display: Display::None, // Start hidden
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(10.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.9)),
-            )).with_children(|parent| {
-                spawn_timer_controls_content(parent);
-            });
+            parent
+                .spawn((
+                    TimerControlsContainer,
+                    Node {
+                        width: Val::Percent(100.0),
+                        display: Display::None, // Start hidden
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        padding: UiRect::all(Val::Px(10.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.9)),
+                ))
+                .with_children(|parent| {
+                    spawn_timer_controls_content(parent);
+                });
         });
     }
 }
 
 fn spawn_timer_controls_content(parent: &mut RelatedSpawnerCommands<ChildOf>) {
     // Time controls row
-    parent.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            display: Display::Flex,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            margin: UiRect::bottom(Val::Px(10.0)),
-            ..default()
-        },
-        BackgroundColor(Color::NONE),
-    )).with_children(|parent| {
-        // Time adjustment buttons (negative)
-        let negative_adjustments = [
-            ("-1h", -3600.0),
-            ("-15m", -900.0),
-            ("-5m", -300.0),
-            ("-1m", -60.0),
-            ("-15s", -15.0),
-            ("-5s", -5.0),
-            ("-1s", -1.0),
-        ];
-
-        for (label, adjustment) in negative_adjustments {
-            parent.spawn((
-                TimeAdjustButton { adjustment },
-                Button,
-                Node {
-                    width: Val::Px(50.0),
-                    height: Val::Px(40.0),
-                    margin: UiRect::horizontal(Val::Px(3.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-                BorderColor(Color::srgb(0.5, 0.5, 0.5)),
-            )).with_children(|parent| {
-                parent.spawn((
-                    Text::new(label),
-                    TextFont {
-                        font_size: 14.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                ));
-            });
-        }
-
-        // Time display
-        parent.spawn((
-            TimeDisplay,
-            Text::new("00:03:00"),
-            TextFont {
-                font_size: 32.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
+    parent
+        .spawn((
             Node {
-                margin: UiRect::horizontal(Val::Px(20.0)),
+                width: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(10.0)),
                 ..default()
             },
-        ));
+            BackgroundColor(Color::NONE),
+        ))
+        .with_children(|parent| {
+            // Time adjustment buttons (negative)
+            let negative_adjustments = [
+                ("-1h", -3600.0),
+                ("-15m", -900.0),
+                ("-5m", -300.0),
+                ("-1m", -60.0),
+                ("-15s", -15.0),
+                ("-5s", -5.0),
+                ("-1s", -1.0),
+            ];
 
-        // Time adjustment buttons (positive)
-        let positive_adjustments = [
-            ("+1s", 1.0),
-            ("+5s", 5.0),
-            ("+15s", 15.0),
-            ("+1m", 60.0),
-            ("+5m", 300.0),
-            ("+15m", 900.0),
-            ("+1h", 3600.0),
-        ];
+            for (label, adjustment) in negative_adjustments {
+                parent
+                    .spawn((
+                        TimeAdjustButton { adjustment },
+                        Button,
+                        Node {
+                            width: Val::Px(50.0),
+                            height: Val::Px(40.0),
+                            margin: UiRect::horizontal(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                        BorderColor(Color::srgb(0.5, 0.5, 0.5)),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            Text::new(label),
+                            TextFont {
+                                font_size: 14.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                    });
+            }
 
-        for (label, adjustment) in positive_adjustments {
+            // Time display
             parent.spawn((
-                TimeAdjustButton { adjustment },
-                Button,
-                Node {
-                    width: Val::Px(50.0),
-                    height: Val::Px(40.0),
-                    margin: UiRect::horizontal(Val::Px(3.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
+                TimeDisplay,
+                Text::new("00:03:00"),
+                TextFont {
+                    font_size: 32.0,
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-                BorderColor(Color::srgb(0.5, 0.5, 0.5)),
-            )).with_children(|parent| {
-                parent.spawn((
-                    Text::new(label),
-                    TextFont {
-                        font_size: 14.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                ));
-            });
-        }
-    });
+                TextColor(Color::WHITE),
+                Node {
+                    margin: UiRect::horizontal(Val::Px(20.0)),
+                    ..default()
+                },
+            ));
+
+            // Time adjustment buttons (positive)
+            let positive_adjustments = [
+                ("+1s", 1.0),
+                ("+5s", 5.0),
+                ("+15s", 15.0),
+                ("+1m", 60.0),
+                ("+5m", 300.0),
+                ("+15m", 900.0),
+                ("+1h", 3600.0),
+            ];
+
+            for (label, adjustment) in positive_adjustments {
+                parent
+                    .spawn((
+                        TimeAdjustButton { adjustment },
+                        Button,
+                        Node {
+                            width: Val::Px(50.0),
+                            height: Val::Px(40.0),
+                            margin: UiRect::horizontal(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                        BorderColor(Color::srgb(0.5, 0.5, 0.5)),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            Text::new(label),
+                            TextFont {
+                                font_size: 14.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                    });
+            }
+        });
 
     // Control buttons row
-    parent.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            display: Display::Flex,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::NONE),
-    )).with_children(|parent| {
-        parent.spawn((
-            StartButton,
-            Button,
+    parent
+        .spawn((
             Node {
-                width: Val::Px(60.0),
-                height: Val::Px(40.0),
-                margin: UiRect::horizontal(Val::Px(5.0)),
+                width: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.2, 0.7, 0.2)),
-            BorderColor(Color::WHITE),
-        )).with_children(|parent| {
-            parent.spawn((
-                Text::new("Start"),
-                TextFont {
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
-        });
+            BackgroundColor(Color::NONE),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    StartButton,
+                    Button,
+                    Node {
+                        width: Val::Px(60.0),
+                        height: Val::Px(40.0),
+                        margin: UiRect::horizontal(Val::Px(5.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.2, 0.7, 0.2)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Start"),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
 
-        parent.spawn((
-            PauseButton,
-            Button,
-            Node {
-                width: Val::Px(60.0),
-                height: Val::Px(40.0),
-                margin: UiRect::horizontal(Val::Px(5.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.7, 0.7, 0.2)),
-            BorderColor(Color::WHITE),
-        )).with_children(|parent| {
-            parent.spawn((
-                Text::new("Pause"),
-                TextFont {
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
-        });
+            parent
+                .spawn((
+                    PauseButton,
+                    Button,
+                    Node {
+                        width: Val::Px(60.0),
+                        height: Val::Px(40.0),
+                        margin: UiRect::horizontal(Val::Px(5.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.7, 0.7, 0.2)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Pause"),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
 
-        parent.spawn((
-            ResetButton,
-            Button,
-            Node {
-                width: Val::Px(60.0),
-                height: Val::Px(40.0),
-                margin: UiRect::horizontal(Val::Px(5.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.7, 0.2, 0.2)),
-            BorderColor(Color::WHITE),
-        )).with_children(|parent| {
-            parent.spawn((
-                Text::new("Reset"),
-                TextFont {
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
+            parent
+                .spawn((
+                    ResetButton,
+                    Button,
+                    Node {
+                        width: Val::Px(60.0),
+                        height: Val::Px(40.0),
+                        margin: UiRect::horizontal(Val::Px(5.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.7, 0.2, 0.2)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Reset"),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
         });
-    });
 }
-
-
 
 fn handle_timer_buttons(
     mut interaction_query: Query<
@@ -316,15 +332,30 @@ fn handle_timer_buttons(
 fn handle_control_buttons(
     mut start_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<StartButton>, Without<PauseButton>, Without<ResetButton>),
+        (
+            Changed<Interaction>,
+            With<StartButton>,
+            Without<PauseButton>,
+            Without<ResetButton>,
+        ),
     >,
     mut pause_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<PauseButton>, Without<StartButton>, Without<ResetButton>),
+        (
+            Changed<Interaction>,
+            With<PauseButton>,
+            Without<StartButton>,
+            Without<ResetButton>,
+        ),
     >,
     mut reset_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<ResetButton>, Without<StartButton>, Without<PauseButton>),
+        (
+            Changed<Interaction>,
+            With<ResetButton>,
+            Without<StartButton>,
+            Without<PauseButton>,
+        ),
     >,
     mut timer_state: ResMut<TimerState>,
 ) {
