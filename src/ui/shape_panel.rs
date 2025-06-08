@@ -252,13 +252,48 @@ fn spawn_morphing_button(mut commands: Commands, query: Query<Entity, With<Shape
                     position_type: PositionType::Absolute,
                     right: Val::Px(10.0),
                     top: Val::Px(12.5),
+                    flex_direction: FlexDirection::Row,
                     ..default()
                 },
                 BackgroundColor(Color::srgb(0.2, 0.6, 0.2)),
                 BorderColor(Color::WHITE),
-                Text::new("MORPH"),
-                TextColor(Color::WHITE),
-            ));
+            )).with_children(|parent| {
+                // Create a visual representation of morphing with shape indicators
+                parent.spawn((
+                    Node {
+                        width: Val::Px(8.0),
+                        height: Val::Px(12.0),
+                        margin: UiRect::right(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    BorderColor(Color::WHITE),
+                ));
+
+                // Arrow indicator
+                parent.spawn((
+                    Text::new("<>"),
+                    TextColor(Color::WHITE),
+                    Node {
+                        margin: UiRect::horizontal(Val::Px(2.0)),
+                        ..default()
+                    },
+                ));
+
+                // Second shape indicator
+                parent.spawn((
+                    Node {
+                        width: Val::Px(8.0),
+                        height: Val::Px(12.0),
+                        margin: UiRect::left(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    BorderColor(Color::WHITE),
+                ));
+            });
         });
     }
 }
