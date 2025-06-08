@@ -1,6 +1,7 @@
 pub mod color_panel;
 pub mod timer_panel;
 pub mod shape_panel;
+pub mod pause_overlay;
 
 use bevy::prelude::*;
 
@@ -35,6 +36,7 @@ impl Plugin for UIPlugin {
             color_panel::ColorPanelPlugin,
             timer_panel::TimerPanelPlugin,
             shape_panel::ShapePanelPlugin,
+            pause_overlay::PauseOverlayPlugin,
         ))
         .init_resource::<TimerPanelVisible>()
         .add_systems(Startup, setup_ui_layout);

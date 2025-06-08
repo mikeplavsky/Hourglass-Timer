@@ -12,6 +12,8 @@ impl Plugin for HourglassPlugin {
                 update_hourglass_color,
                 update_hourglass_timer,
                 update_hourglass_shape,
+                handle_hourglass_click,
+                handle_timer_start,
             ));
     }
 }
@@ -222,7 +224,7 @@ fn spawn_hourglass(
         .with_plates(plates_config)
         .with_sand(HourglassMeshSandConfig {
             color: config.color,
-            fill_percent: 1.0,
+            fill_percent: 0.0, // Start with bottom bulb filled (empty top)
             wall_offset: 4.0,
         })
         .with_sand_splash(SandSplashConfig::default())
@@ -269,7 +271,7 @@ fn update_hourglass_shape(
             .with_plates(plates_config)
             .with_sand(HourglassMeshSandConfig {
                 color: config.color,
-                fill_percent: 1.0,
+                fill_percent: 0.0, // Start with bottom bulb filled (empty top)
                 wall_offset: 4.0,
             })
             .with_sand_splash(SandSplashConfig::default())
@@ -289,12 +291,85 @@ fn update_hourglass_timer(
         hourglass.running = timer_state.is_running;
 
         // Update chamber levels based on remaining time
-        // When timer starts (remaining = duration), top should be full (1.0) and bottom empty (0.0)
-        // When timer ends (remaining = 0), top should be empty (0.0) and bottom full (1.0)
         if timer_state.duration > 0.0 {
-            let progress = timer_state.remaining / timer_state.duration;
-            hourglass.upper_chamber = progress;        // Full when time remaining
-            hourglass.lower_chamber = 1.0 - progress; // Empty when time remaining
+            if timer_state.is_running && !hourglass.flipping {
+                // When timer is running and not currently flipping, sand flows from top to bottom
+                let progress = timer_state.remaining / timer_state.duration;
+                hourglass.upper_chamber = progress;        // Full when time remaining
+                hourglass.lower_chamber = 1.0 - progress; // Empty when time remaining
+            } else if !timer_state.is_running {
+                // When timer is not running, only reset to initial state if timer is at full duration (not started or reset)
+                if timer_state.remaining >= timer_state.duration {
+                    // Initial state: bottom bulb filled
+                    hourglass.upper_chamber = 0.0;
+                    hourglass.lower_chamber = 1.0;
+                }
+                // If paused partway through, maintain current sand levels (don't change chambers)
+            }
+            // Don't manually update chambers during flip animation - let the library handle it
         }
     }
+}
+
+fn handle_hourglass_click(
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    hourglass_query: Query<&Transform, With<MainHourglass>>,
+    mut timer_state: ResMut<TimerState>,
+) {
+    if mouse_input.just_pressed(MouseButton::Left) {
+        if let Ok(window) = windows.single() {
+            if let Some(cursor_position) = window.cursor_position() {
+                if let Ok((camera, camera_transform)) = camera_query.single() {
+                    if let Ok(hourglass_transform) = hourglass_query.single() {
+                        // Convert screen coordinates to world coordinates
+                        if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                            // Check if click is within hourglass bounds (approximate 400x400 area)
+                            let hourglass_pos = hourglass_transform.translation.truncate();
+                            let distance = world_position.distance(hourglass_pos);
+
+                            if distance < 200.0 { // Half the hourglass size
+                                if timer_state.is_running {
+                                    // Pause the timer if it's running
+                                    timer_state.is_running = false;
+                                } else {
+                                    // Start the timer if it's not running
+                                    timer_state.is_running = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn handle_timer_start(
+    timer_state: Res<TimerState>,
+    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut last_running_state: Local<bool>,
+    mut has_ever_started: Local<bool>,
+) {
+    // Check if timer state changed from not running to running
+    if timer_state.is_running && !*last_running_state {
+        // Only flip on the very first start (when timer hasn't been started before)
+        if !*has_ever_started {
+            for mut hourglass in hourglass_query.iter_mut() {
+                if hourglass.can_flip() {
+                    hourglass.flip();
+                }
+            }
+            *has_ever_started = true;
+        }
+        // If resuming from pause, don't flip - just continue
+    }
+
+    // Reset the "has ever started" flag when timer is reset (remaining == duration)
+    if timer_state.remaining >= timer_state.duration && !timer_state.is_running {
+        *has_ever_started = false;
+    }
+
+    *last_running_state = timer_state.is_running;
 }
