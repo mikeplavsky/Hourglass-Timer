@@ -1,9 +1,7 @@
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
-use bevy_hourglass::Hourglass;
 use crate::resources::TimerState;
 use crate::ui::{BottomTimerMarker, TimerPanelVisible};
-use crate::hourglass::MainHourglass;
 
 pub struct TimerPanelPlugin;
 
@@ -55,7 +53,7 @@ fn spawn_timer_controls(
                 ToggleButton,
                 Button,
                 Node {
-                    width: Val::Px(60.0),
+                    width: Val::Px(130.0),
                     height: Val::Px(30.0),
                     margin: UiRect::all(Val::Px(5.0)),
                     justify_content: JustifyContent::Center,
@@ -67,9 +65,9 @@ fn spawn_timer_controls(
                 BorderColor(Color::WHITE),
             )).with_children(|parent| {
                 parent.spawn((
-                    Text::new("⏱️"),
+                    Text::new("Timer Controls"),
                     TextFont {
-                        font_size: 16.0,
+                        font_size: 14.0,
                         ..default()
                     },
                     TextColor(Color::WHITE),
@@ -329,19 +327,12 @@ fn handle_control_buttons(
         (Changed<Interaction>, With<ResetButton>, Without<StartButton>, Without<PauseButton>),
     >,
     mut timer_state: ResMut<TimerState>,
-    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
 ) {
     // Handle Start button
     for (interaction, mut bg_color) in &mut start_query {
         match *interaction {
             Interaction::Pressed => {
                 if !timer_state.is_running {
-                    // Trigger flip animation when starting the timer
-                    for mut hourglass in hourglass_query.iter_mut() {
-                        hourglass.flip();
-                        hourglass.lower_chamber = 0.0;
-                        hourglass.upper_chamber = 1.0;
-                    }
                     timer_state.is_running = true;
                 }
                 *bg_color = BackgroundColor(Color::srgb(0.3, 0.8, 0.3));

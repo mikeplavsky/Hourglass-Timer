@@ -54,7 +54,7 @@ fn setup_ui_layout(mut commands: Commands) {
         },
         BackgroundColor(Color::NONE),
     )).with_children(|parent| {
-        // Top controls container
+        // Top controls container - narrow color panel only
         parent.spawn((
             Name::new("Top Controls Container"),
             TopControlsMarker,
@@ -62,45 +62,44 @@ fn setup_ui_layout(mut commands: Commands) {
                 width: Val::Percent(100.0),
                 display: Display::Flex,
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(10.0)),
+                padding: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.9)),
         )).with_children(|parent| {
-            // Color selection row
+            // Color selection row - narrow and centered
             parent.spawn((
                 Name::new("Color Row Container"),
                 ColorRowMarker,
                 Node {
                     width: Val::Percent(100.0),
-                    height: Val::Px(60.0),
+                    height: Val::Px(25.0),
                     display: Display::Flex,
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    padding: UiRect::vertical(Val::Px(5.0)),
+                    justify_content: JustifyContent::Center,
+                    padding: UiRect::vertical(Val::Px(2.0)),
                     overflow: Overflow::clip_x(),
                     ..default()
                 },
-                BackgroundColor(Color::NONE),
-            ));
-
-            // Shape selection row
-            parent.spawn((
-                Name::new("Shape Row Container"),
-                ShapeRowMarker,
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Px(80.0),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::vertical(Val::Px(5.0)),
-                    overflow: Overflow::clip_x(),
-                    ..default()
-                },
-                BackgroundColor(Color::NONE),
             ));
         });
+
+        // Shape selection row - positioned directly under color panel
+        parent.spawn((
+            Name::new("Shape Row Container"),
+            ShapeRowMarker,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(50.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                padding: UiRect::vertical(Val::Px(2.0)),
+                overflow: Overflow::clip_x(),
+                ..default()
+            },
+        ));
 
         // Center area (for hourglass) - takes remaining space
         parent.spawn((

@@ -23,21 +23,6 @@ fn spawn_color_buttons(
     // Find the color row container
     if let Ok(panel_entity) = query.single() {
         commands.entity(panel_entity).with_children(|parent| {
-            // Add a label
-            parent.spawn((
-                Text::new("Colors:"),
-                TextFont {
-                    font_size: 14.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Node {
-                    margin: UiRect::right(Val::Px(10.0)),
-                    align_self: AlignSelf::Center,
-                    ..default()
-                },
-            ));
-
             // Add color buttons in horizontal layout
             for (i, &color) in COLOR_PALETTE.iter().enumerate() {
                 parent.spawn((
@@ -45,10 +30,10 @@ fn spawn_color_buttons(
                     ColorButton { color },
                     Button,
                     Node {
-                        width: Val::Px(40.0),
-                        height: Val::Px(40.0),
-                        margin: UiRect::horizontal(Val::Px(3.0)),
-                        border: UiRect::all(Val::Px(2.0)),
+                        width: Val::Px(20.0),
+                        height: Val::Px(20.0),
+                        margin: UiRect::horizontal(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(1.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         flex_shrink: 0.0, // Prevent shrinking

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
 use crate::resources::{HourglassConfig, HourglassShape};
+use crate::ui::ShapeRowMarker;
 
 use crate::hourglass::get_mini_shape_config;
 
@@ -15,6 +16,7 @@ impl Plugin for ShapePanelPlugin {
                 handle_hover_effects,
                 update_hourglass_layering,
                 update_hover_timers,
+                update_mini_hourglass_positions,
             ));
     }
 }
@@ -66,7 +68,6 @@ fn handle_hover_effects(
 
 fn update_hourglass_layering(
     config: Res<HourglassConfig>,
-    time: Res<Time>,
     mut mini_hourglass_query: Query<(&mut Transform, &MiniHourglass, &ShapeButton, Option<&HoveredHourglass>)>,
 ) {
     for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
@@ -106,11 +107,51 @@ fn update_hover_timers(
 
 fn update_mini_hourglass_colors(
     config: Res<HourglassConfig>,
-    mut query: Query<&mut Hourglass, With<MiniHourglass>>,
+    mut query: Query<&mut bevy_hourglass::HourglassMeshSandState, With<MiniHourglass>>,
 ) {
     if config.is_changed() {
-        for mut hourglass in query.iter_mut() {
-            hourglass.sand_color = config.color;
+        for mut sand_state in query.iter_mut() {
+            sand_state.sand_config.color = config.color;
+            sand_state.needs_update = true;
+        }
+    }
+}
+
+fn update_mini_hourglass_positions(
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    shape_row_query: Query<&Node, With<ShapeRowMarker>>,
+    mut mini_hourglass_query: Query<(&mut Transform, &mut MiniHourglass), With<MiniHourglass>>,
+) {
+    // Check if the shape row UI node exists to ensure proper positioning
+    if shape_row_query.single().is_ok() {
+        if let Ok(window) = windows.single() {
+            if let Ok((camera, camera_transform)) = camera_query.single() {
+                // Calculate the center of the shape row area
+                let window_width = window.width();
+
+                // Calculate shape row position based on UI layout:
+                let shape_row_center_y = 60.0;
+
+                // Convert screen space to world space for the shape row center
+                let shape_row_screen_pos = Vec2::new(window_width / 2.0, shape_row_center_y);
+
+                if let Ok(shape_row_world_pos) = camera.viewport_to_world_2d(camera_transform, shape_row_screen_pos) {
+                    // Update each mini hourglass position relative to the shape row
+                    for (mut transform, mut mini_hourglass) in mini_hourglass_query.iter_mut() {
+                        // Calculate new position based on original X offset from center
+                        let new_position = Vec3::new(
+                            shape_row_world_pos.x + mini_hourglass.original_x,
+                            shape_row_world_pos.y,
+                            10.0 // Keep elevated Z position
+                        );
+
+                        // Update both current transform and stored base position
+                        transform.translation = new_position;
+                        mini_hourglass.base_position = new_position;
+                    }
+                }
+            }
         }
     }
 }
@@ -125,6 +166,7 @@ struct ShapeButton {
 #[derive(Component)]
 struct MiniHourglass {
     base_position: Vec3, // Store the original position
+    original_x: f32, // Store the original X position for positioning
 }
 
 #[derive(Component)]
@@ -147,16 +189,15 @@ fn spawn_shape_buttons(
     ];
 
     for (i, shape) in shapes.iter().enumerate() {
-        // Position them horizontally across the top area
-        let x_pos = -200.0 + (i as f32 * 120.0); // Spaced horizontally
-        let y_pos = 200.0; // Position in the top area for shape row
+        // Calculate offset from center for horizontal spacing
+        let x_offset = -80.0 + (i as f32 * 50.0); // Offset from center
 
         let (body_config, plates_config) = get_mini_shape_config(*shape);
 
-        let base_z = 10.0; // Start with elevated base position
-        let position = Vec3::new(x_pos, y_pos, base_z);
+        // Start with a temporary position - will be updated by update_mini_hourglass_positions
+        let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
-        let entity = HourglassMeshBuilder::new(Transform::from_translation(position))
+        let entity = HourglassMeshBuilder::new(Transform::from_translation(temp_position))
             .with_body(body_config)
             .with_plates(plates_config)
             .with_sand(HourglassMeshSandConfig {
@@ -166,9 +207,13 @@ fn spawn_shape_buttons(
             })
             .build(&mut commands, &mut meshes, &mut materials);
 
+        // Remove the Hourglass component from mini hourglasses since they should be static displays
+        commands.entity(entity).remove::<Hourglass>();
+
         commands.entity(entity).insert((
             MiniHourglass {
-                base_position: position,
+                base_position: temp_position,
+                original_x: x_offset, // Store the offset from center
             },
             ShapeButton { shape: *shape }, // Make it clickable
             Name::new(format!("Mini Hourglass {:?}", shape)),

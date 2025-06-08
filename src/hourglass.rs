@@ -21,7 +21,7 @@ pub struct MainHourglass;
 
 // Helper function to create main hourglass configurations for different shapes
 fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
-    let base_height = 200.0; // Full size for main hourglass
+    let base_height = 400.0; // Full size for main hourglass
 
     match shape {
         HourglassShape::Classic => (
@@ -41,18 +41,18 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 200.0,
+                width: 400.0,
                 height: 10.0,
-                color: Color::srgb(0.6, 0.4, 0.2),
+                ..Default::default()
             }
         ),
         HourglassShape::Modern => (
             HourglassMeshBodyConfig {
                 total_height: base_height,
                 bulb_style: BulbStyle::Circular {
-                    curvature: 0.3, // Sharper curves
-                    width_factor: 0.9,
-                    curve_resolution: 16,
+                    curvature: 0.0,
+                    width_factor: 1.0,
+                    curve_resolution: 10,
                 },
                 neck_style: NeckStyle::Straight {
                     width: 12.0,
@@ -61,39 +61,39 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 180.0,
+                width: 380.0,
                 height: 12.0,
-                color: Color::srgb(0.4, 0.4, 0.6),
+                ..Default::default()
             }
         ),
         HourglassShape::Slim => (
             HourglassMeshBodyConfig {
                 total_height: base_height * 1.2, // Taller
                 bulb_style: BulbStyle::Circular {
-                    curvature: 1.2,
+                    curvature: 1.5,
                     width_factor: 0.7, // Narrower
                     curve_resolution: 18,
                 },
                 neck_style: NeckStyle::Curved {
                     curvature: 1.5,
-                    width: 10.0, // Thinner neck
+                    width: 12.0, // Thinner neck
                     height: 24.0,
                     curve_resolution: 8,
                 },
                 color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 140.0, // Narrower plates
+                width: 340.0, // Narrower plates
                 height: 8.0,
-                color: Color::srgb(0.5, 0.3, 0.6),
+                ..Default::default()
             }
         ),
         HourglassShape::Wide => (
             HourglassMeshBodyConfig {
                 total_height: base_height * 0.8, // Shorter
                 bulb_style: BulbStyle::Circular {
-                    curvature: 0.8,
-                    width_factor: 1.3, // Wider
+                    curvature: 1.0,
+                    width_factor: 1.2, // Wider
                     curve_resolution: 24,
                 },
                 neck_style: NeckStyle::Curved {
@@ -105,9 +105,9 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
                 color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 260.0, // Wider plates
+                width: 390.0, // Wider plates
                 height: 14.0,
-                color: Color::srgb(0.6, 0.3, 0.3),
+                ..Default::default()
             }
         ),
     }
@@ -115,7 +115,7 @@ fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, Hou
 
 // Helper function to create mini hourglass configurations for different shapes (for UI panels)
 pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
-    let base_height = 40.0; // Smaller size for mini hourglasses
+    let base_height = 25.0; // Smaller size for mini hourglasses
 
     match shape {
         HourglassShape::Classic => (
@@ -124,84 +124,84 @@ pub fn get_mini_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig,
                 bulb_style: BulbStyle::Circular {
                     curvature: 1.0,
                     width_factor: 1.0,
-                    curve_resolution: 12, // Lower resolution for performance
+                    curve_resolution: 10, // Lower resolution for performance
                 },
                 neck_style: NeckStyle::Curved {
                     curvature: 1.0,
                     width: 3.0,
                     height: 4.0,
-                    curve_resolution: 6,
+                    curve_resolution: 5,
                 },
-                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+                color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 30.0,
+                width: 25.0,
                 height: 2.0,
-                color: Color::srgb(0.6, 0.4, 0.2),
+                ..Default::default()
             }
         ),
         HourglassShape::Modern => (
             HourglassMeshBodyConfig {
                 total_height: base_height,
                 bulb_style: BulbStyle::Circular {
-                    curvature: 0.3,
-                    width_factor: 0.9,
-                    curve_resolution: 10,
+                    curvature: 0.0,
+                    width_factor: 1.0,
+                    curve_resolution: 5,
                 },
                 neck_style: NeckStyle::Straight {
                     width: 2.5,
                     height: 6.0,
                 },
-                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+                color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 28.0,
+                width: 22.0,
                 height: 2.5,
-                color: Color::srgb(0.4, 0.4, 0.6),
+                ..Default::default()
             }
         ),
         HourglassShape::Slim => (
             HourglassMeshBodyConfig {
                 total_height: base_height * 1.2,
                 bulb_style: BulbStyle::Circular {
-                    curvature: 1.2,
+                    curvature: 1.5,
                     width_factor: 0.7,
-                    curve_resolution: 10,
+                    curve_resolution: 8,
                 },
                 neck_style: NeckStyle::Curved {
                     curvature: 1.5,
                     width: 2.0,
                     height: 5.0,
-                    curve_resolution: 5,
+                    curve_resolution: 4,
                 },
-                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+                color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 22.0,
+                width: 20.0,
                 height: 1.5,
-                color: Color::srgb(0.5, 0.3, 0.6),
+                ..Default::default()
             }
         ),
         HourglassShape::Wide => (
             HourglassMeshBodyConfig {
                 total_height: base_height * 0.8,
                 bulb_style: BulbStyle::Circular {
-                    curvature: 0.8,
-                    width_factor: 1.3,
-                    curve_resolution: 14,
+                    curvature: 1.0,
+                    width_factor: 1.2,
+                    curve_resolution: 10,
                 },
                 neck_style: NeckStyle::Curved {
                     curvature: 0.7,
                     width: 4.0,
                     height: 3.0,
-                    curve_resolution: 7,
+                    curve_resolution: 6,
                 },
-                color: Color::srgba(0.85, 0.95, 1.0, 0.3),
+                color: Color::srgba(0.85, 0.95, 1.0, 0.2),
             },
             HourglassMeshPlatesConfig {
-                width: 38.0,
+                width: 28.0,
                 height: 3.0,
-                color: Color::srgb(0.6, 0.3, 0.3),
+                ..Default::default()
             }
         ),
     }
@@ -289,12 +289,12 @@ fn update_hourglass_timer(
         hourglass.running = timer_state.is_running;
 
         // Update chamber levels based on remaining time
-        // When timer starts (remaining = duration), top should be empty (0.0) and bottom full (1.0)
-        // When timer ends (remaining = 0), top should be full (1.0) and bottom empty (0.0)
+        // When timer starts (remaining = duration), top should be full (1.0) and bottom empty (0.0)
+        // When timer ends (remaining = 0), top should be empty (0.0) and bottom full (1.0)
         if timer_state.duration > 0.0 {
             let progress = timer_state.remaining / timer_state.duration;
-            hourglass.upper_chamber = 1.0 - progress;  // Inverted: starts at 0.0
-            hourglass.lower_chamber = progress;        // Starts at 1.0
+            hourglass.upper_chamber = progress;        // Full when time remaining
+            hourglass.lower_chamber = 1.0 - progress; // Empty when time remaining
         }
     }
 }

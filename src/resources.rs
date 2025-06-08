@@ -49,11 +49,6 @@ impl TimerState {
         self.is_running = false;
     }
 
-    pub fn set_duration(&mut self, duration: f32) {
-        self.duration = duration;
-        self.remaining = duration;
-    }
-
     pub fn add_time(&mut self, seconds: f32) {
         self.duration += seconds;
         self.remaining += seconds;
@@ -73,12 +68,12 @@ impl TimerState {
 
 // Color palette for the color selector
 pub const COLOR_PALETTE: &[Color] = &[
-    Color::srgb(0.8, 0.6, 0.2),  // Sandy
-    Color::srgb(0.2, 0.6, 0.8),  // Blue
+    Color::srgb(0.0, 0.0, 0.0),  // Black
+    Color::srgb(1.0, 1.0, 1.0),  // White
+    Color::srgb(0.1, 0.3, 0.8),  // Blue
     Color::srgb(0.8, 0.2, 0.2),  // Red
-    Color::srgb(0.2, 0.8, 0.2),  // Green
+    Color::srgb(0.7, 0.1, 0.8),  // Purple
+    Color::srgb(0.1, 0.5, 0.1),  // Green
     Color::srgb(0.8, 0.8, 0.2),  // Yellow
-    Color::srgb(0.8, 0.2, 0.8),  // Purple
     Color::srgb(0.8, 0.4, 0.0),  // Orange
-    Color::srgb(0.5, 0.5, 0.5),  // Gray
 ];
