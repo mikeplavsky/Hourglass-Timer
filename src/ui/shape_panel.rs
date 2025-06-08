@@ -30,6 +30,7 @@ fn handle_hover_effects(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mini_hourglass_query: Query<(Entity, &Transform, &ShapeButton), With<MiniHourglass>>,
+    morphing_button_query: Query<(Entity, &Transform), (With<MorphingButton>, With<MiniHourglass>)>,
     hovered_query: Query<Entity, With<HoveredHourglass>>,
 ) {
     if let Ok(window) = windows.single() {
@@ -50,6 +51,18 @@ fn handle_hover_effects(
                         if distance < detection_radius {
                             currently_hovered = Some(entity);
                             break;
+                        }
+                    }
+
+                    // Check if hovering over the morphing button
+                    if currently_hovered.is_none() {
+                        if let Ok((entity, transform)) = morphing_button_query.single() {
+                            let distance = world_position.distance(transform.translation.truncate());
+                            let detection_radius = 20.0 * transform.scale.x;
+
+                            if distance < detection_radius {
+                                currently_hovered = Some(entity);
+                            }
                         }
                     }
 
@@ -82,7 +95,13 @@ fn update_hourglass_layering(
         &ShapeButton,
         Option<&HoveredHourglass>,
     )>,
+    mut morphing_button_query: Query<(
+        &mut Transform,
+        &MiniHourglass,
+        Option<&HoveredHourglass>,
+    ), (With<MorphingButton>, Without<ShapeButton>)>,
 ) {
+    // Handle regular hourglass buttons
     for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
         let base_position = mini_hourglass.base_position;
 
@@ -92,6 +111,29 @@ fn update_hourglass_layering(
             1.3
         } else if config.shape_type == shape_button.shape {
             // Selected state: slightly larger
+            1.15
+        } else {
+            // Default state
+            1.0
+        };
+
+        // Apply scale
+        transform.scale = Vec3::splat(scale);
+
+        // Keep original position
+        transform.translation = base_position;
+    }
+
+    // Handle morphing button
+    if let Ok((mut transform, mini_hourglass, hovered)) = morphing_button_query.single_mut() {
+        let base_position = mini_hourglass.base_position;
+
+        // Visual effects with scaling only
+        let scale = if let Some(_hover_component) = hovered {
+            // Hovered state: larger scale
+            1.3
+        } else if config.shape_mode == ShapeMode::Morphing {
+            // Selected state: slightly larger when morphing is active
             1.15
         } else {
             // Default state
@@ -203,7 +245,7 @@ fn spawn_shape_buttons(
 
     for (i, shape) in shapes.iter().enumerate() {
         // Calculate offset from center for horizontal spacing
-        let x_offset = -80.0 + (i as f32 * 50.0); // Offset from center
+        let x_offset = -100.0 + (i as f32 * 50.0); // Offset from center
 
         let (body_config, plates_config) = get_mini_shape_config(*shape);
 
@@ -234,94 +276,77 @@ fn spawn_shape_buttons(
     }
 }
 
-fn spawn_morphing_button(mut commands: Commands, query: Query<Entity, With<ShapeRowMarker>>) {
-    if let Ok(panel_entity) = query.single() {
-        commands.entity(panel_entity).with_children(|parent| {
-            // Add Morphing Button to the right side of the shape row
-            parent.spawn((
-                Name::new("Morphing Button"),
-                MorphingButton,
-                Button,
-                Node {
-                    width: Val::Px(60.0),
-                    height: Val::Px(25.0),
-                    margin: UiRect::all(Val::Px(5.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    position_type: PositionType::Absolute,
-                    right: Val::Px(10.0),
-                    top: Val::Px(12.5),
-                    flex_direction: FlexDirection::Row,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.2, 0.6, 0.2)),
-                BorderColor(Color::WHITE),
-            )).with_children(|parent| {
-                // Create a visual representation of morphing with shape indicators
-                parent.spawn((
-                    Node {
-                        width: Val::Px(8.0),
-                        height: Val::Px(12.0),
-                        margin: UiRect::right(Val::Px(2.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::NONE),
-                    BorderColor(Color::WHITE),
-                ));
+fn spawn_morphing_button(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    // Create the morphing button as a 3D object positioned alongside the hourglasses
+    let x_offset = 100.0; // Position after the 4th hourglass
 
-                // Arrow indicator
-                parent.spawn((
-                    Text::new("<>"),
-                    TextColor(Color::WHITE),
-                    Node {
-                        margin: UiRect::horizontal(Val::Px(2.0)),
-                        ..default()
-                    },
-                ));
+    // Start with a temporary position - will be updated by update_mini_hourglass_positions
+    let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
-                // Second shape indicator
-                parent.spawn((
-                    Node {
-                        width: Val::Px(8.0),
-                        height: Val::Px(12.0),
-                        margin: UiRect::left(Val::Px(2.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::NONE),
-                    BorderColor(Color::WHITE),
-                ));
-            });
-        });
-    }
+    // Create a simple rectangle background for the button
+    let button_entity = commands.spawn((
+        Name::new("Morphing Button 3D"),
+        MorphingButton,
+        Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+        Transform::from_translation(temp_position),
+        MiniHourglass {
+            base_position: temp_position,
+            original_x: x_offset,
+        },
+    )).id();
+
+    // Create the "?" text as a child entity
+    commands.entity(button_entity).with_children(|parent| {
+        parent.spawn((
+            Name::new("Question Mark Text"),
+            Text2d::new("?"),
+            TextColor(Color::WHITE),
+            TextFont {
+                font_size: 32.0,
+                ..default()
+            },
+            Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)), // Slightly in front
+        ));
+    });
 }
 
 fn handle_morphing_button_clicks(
-    mut interaction_query: Query<
-        (&Interaction, &mut BorderColor, &mut BackgroundColor),
-        (Changed<Interaction>, With<MorphingButton>),
-    >,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    morphing_button_query: Query<&Transform, (With<MorphingButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
 ) {
-    for (interaction, mut border_color, mut bg_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                if config.shape_mode == ShapeMode::Static {
-                    config.shape_mode = ShapeMode::Morphing;
-                    *bg_color = BackgroundColor(Color::srgb(0.0, 1.0, 0.0)); // Green when active
-                } else {
-                    config.shape_mode = ShapeMode::Static;
-                    *bg_color = BackgroundColor(Color::srgb(0.2, 0.6, 0.2)); // Default green
+    if mouse_input.just_pressed(MouseButton::Left) {
+        if let Ok(window) = windows.single() {
+            if let Some(cursor_position) = window.cursor_position() {
+                if let Ok((camera, camera_transform)) = camera_query.single() {
+                    // Convert screen coordinates to world coordinates
+                    if let Ok(world_position) =
+                        camera.viewport_to_world_2d(camera_transform, cursor_position)
+                    {
+                        // Check if click is near the morphing button
+                        if let Ok(transform) = morphing_button_query.single() {
+                            let distance =
+                                world_position.distance(transform.translation.truncate());
+
+                            // Adjust click detection radius based on current scale
+                            let click_radius = 20.0 * transform.scale.x;
+
+                            if distance < click_radius {
+                                // Toggle morphing mode
+                                if config.shape_mode == ShapeMode::Static {
+                                    config.shape_mode = ShapeMode::Morphing;
+                                } else {
+                                    config.shape_mode = ShapeMode::Static;
+                                }
+                            }
+                        }
+                    }
                 }
-                *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
-            }
-            Interaction::Hovered => {
-                *border_color = BorderColor(Color::srgb(0.8, 0.8, 0.8));
-            }
-            Interaction::None => {
-                *border_color = BorderColor(Color::WHITE);
             }
         }
     }

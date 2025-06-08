@@ -28,7 +28,7 @@ impl Plugin for HourglassPlugin {
 #[derive(Component)]
 pub struct MainHourglass;
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Clone)]
 struct DragState {
     is_dragging: bool,
     start_position: Vec2,
@@ -285,25 +285,26 @@ fn update_hourglass_shape(
     mut materials: ResMut<Assets<ColorMaterial>>,
     config: Res<HourglassConfig>,
     timer_state: Res<TimerState>,
-    query: Query<(Entity, &Hourglass), With<MainHourglass>>,
+    query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
 ) {
     // Only recreate hourglass if shape type or shape mode changed (not color changes)
     if config.is_changed() && config.shape_mode == ShapeMode::Static {
-        // Preserve current hourglass state
-        let (_current_upper, _current_lower, _current_running, _current_remaining) =
-            if let Ok((_, hourglass)) = query.single() {
+        // Preserve current hourglass state and drag state
+        let (_current_upper, _current_lower, _current_running, _current_remaining, current_drag_state) =
+            if let Ok((_, hourglass, drag_state)) = query.single() {
                 (
                     hourglass.upper_chamber,
                     hourglass.lower_chamber,
                     hourglass.running,
                     hourglass.remaining_time,
+                    drag_state.clone(),
                 )
             } else {
-                (0.0, 1.0, false, timer_state.duration)
+                (0.0, 1.0, false, timer_state.duration, DragState::new())
             };
 
         // Despawn the old hourglass
-        for (entity, _) in query.iter() {
+        for (entity, _, _) in query.iter() {
             commands.entity(entity).despawn();
         }
 
@@ -337,7 +338,7 @@ fn update_hourglass_shape(
 
         commands.entity(entity).insert((
             MainHourglass,
-            DragState::new(),
+            current_drag_state, // Use the preserved drag state
             Name::new("Main Hourglass"),
         ));
 
@@ -447,27 +448,25 @@ fn update_morphing_shape(
     config: Res<HourglassConfig>,
     timer_state: Res<TimerState>,
     time: Res<Time>,
-    query: Query<(Entity, &Hourglass), With<MainHourglass>>,
+    query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
 ) {
     if config.shape_mode == ShapeMode::Morphing {
-        // Cycle through shapes over time (complete cycle every 8 seconds)
-        let cycle_time = 8.0;
-        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
-
-        // Preserve current hourglass state
+        // Preserve current hourglass state and drag state
         let (
             _current_upper,
             _current_lower,
             _current_running,
             _current_remaining,
-            _current_flipping,
-        ) = if let Ok((_, hourglass)) = query.single() {
+            current_flipping,
+            current_drag_state,
+        ) = if let Ok((_, hourglass, drag_state)) = query.single() {
             (
                 hourglass.upper_chamber,
                 hourglass.lower_chamber,
                 hourglass.running,
                 hourglass.remaining_time,
                 hourglass.flipping,
+                drag_state.clone(),
             )
         } else {
             (
@@ -476,14 +475,24 @@ fn update_morphing_shape(
                 timer_state.is_running,
                 timer_state.remaining,
                 false,
+                DragState::new(),
             )
         };
+
+        // Don't interrupt the hourglass if it's currently flipping
+        if current_flipping {
+            return;
+        }
+
+        // Cycle through shapes over time (complete cycle every 8 seconds)
+        let cycle_time = 8.0;
+        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
 
         // Create morphed shape parameters
         let (body_config, plates_config) = get_morphed_shape_config(t);
 
         // Despawn the old hourglass
-        for (entity, _) in query.iter() {
+        for (entity, _, _) in query.iter() {
             commands.entity(entity).despawn();
         }
 
@@ -515,7 +524,7 @@ fn update_morphing_shape(
 
         commands.entity(entity).insert((
             MainHourglass,
-            DragState::new(),
+            current_drag_state, // Use the preserved drag state
             Name::new("Main Hourglass"),
         ));
 
