@@ -138,7 +138,7 @@ fn spawn_shape_buttons(
     mut materials: ResMut<Assets<ColorMaterial>>,
     config: Res<HourglassConfig>,
 ) {
-    // Spawn mini hourglasses in 3D space positioned in the right panel area
+    // Spawn mini hourglasses in 3D space positioned horizontally for the shape row
     let shapes = [
         HourglassShape::Classic,
         HourglassShape::Modern,
@@ -147,10 +147,9 @@ fn spawn_shape_buttons(
     ];
 
     for (i, shape) in shapes.iter().enumerate() {
-        // Position them in a visible area on the right side
-        // Start closer to center and move right
-        let x_pos = 500.0; // Position on right side but definitely visible
-        let y_pos = 100.0 - (i as f32 * 60.0); // Spaced vertically, starting from top
+        // Position them horizontally across the top area
+        let x_pos = -200.0 + (i as f32 * 120.0); // Spaced horizontally
+        let y_pos = 200.0; // Position in the top area for shape row
 
         let (body_config, plates_config) = get_mini_shape_config(*shape);
 

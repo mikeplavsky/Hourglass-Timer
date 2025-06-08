@@ -8,13 +8,26 @@ pub struct UIPlugin;
 
 // Marker components for UI panels
 #[derive(Component)]
-pub struct LeftPanelMarker;
+pub struct TopControlsMarker;
 
 #[derive(Component)]
-pub struct TopPanelMarker;
+pub struct ColorRowMarker;
 
 #[derive(Component)]
-pub struct RightPanelMarker;
+pub struct ShapeRowMarker;
+
+#[derive(Component)]
+pub struct BottomTimerMarker;
+
+// Resource to track timer panel visibility
+#[derive(Resource)]
+pub struct TimerPanelVisible(pub bool);
+
+impl Default for TimerPanelVisible {
+    fn default() -> Self {
+        Self(false) // Start collapsed
+    }
+}
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
@@ -23,12 +36,13 @@ impl Plugin for UIPlugin {
             timer_panel::TimerPanelPlugin,
             shape_panel::ShapePanelPlugin,
         ))
+        .init_resource::<TimerPanelVisible>()
         .add_systems(Startup, setup_ui_layout);
     }
 }
 
 fn setup_ui_layout(mut commands: Commands) {
-    // Root UI container
+    // Root UI container - vertical layout
     commands.spawn((
         Name::new("UI Root"),
         Node {
@@ -40,81 +54,80 @@ fn setup_ui_layout(mut commands: Commands) {
         },
         BackgroundColor(Color::NONE),
     )).with_children(|parent| {
-        // Top panel container
+        // Top controls container
         parent.spawn((
-            Name::new("Top Panel Container"),
-            TopPanelMarker,
+            Name::new("Top Controls Container"),
+            TopControlsMarker,
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(80.0),
                 display: Display::Flex,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(10.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.9)),
-        ));
-
-        // Main content area with side panels
-        parent.spawn((
-            Name::new("Main Content"),
-            Node {
-                width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                display: Display::Flex,
-                flex_direction: FlexDirection::Row,
-                ..default()
-            },
-            BackgroundColor(Color::NONE),
         )).with_children(|parent| {
-            // Left panel container
+            // Color selection row
             parent.spawn((
-                Name::new("Left Panel Container"),
-                LeftPanelMarker,
+                Name::new("Color Row Container"),
+                ColorRowMarker,
                 Node {
-                    width: Val::Px(100.0),
-                    height: Val::Percent(100.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Px(60.0),
                     display: Display::Flex,
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(10.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.15, 0.15, 0.15, 0.9)),
-            ));
-
-            // Center area (for hourglass)
-            parent.spawn((
-                Name::new("Center Area"),
-                Node {
-                    flex_grow: 1.0,
-                    height: Val::Percent(100.0),
-                    display: Display::Flex,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
+                    padding: UiRect::vertical(Val::Px(5.0)),
+                    overflow: Overflow::clip_x(),
                     ..default()
                 },
                 BackgroundColor(Color::NONE),
             ));
 
-            // Right panel container - made transparent to not block 3D hourglasses
+            // Shape selection row
             parent.spawn((
-                Name::new("Right Panel Container"),
-                RightPanelMarker,
+                Name::new("Shape Row Container"),
+                ShapeRowMarker,
                 Node {
-                    width: Val::Px(100.0),
-                    height: Val::Percent(100.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Px(80.0),
                     display: Display::Flex,
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::vertical(Val::Px(5.0)),
+                    overflow: Overflow::clip_x(),
                     ..default()
                 },
-                BackgroundColor(Color::NONE), // Transparent to not block 3D hourglasses
+                BackgroundColor(Color::NONE),
             ));
         });
+
+        // Center area (for hourglass) - takes remaining space
+        parent.spawn((
+            Name::new("Center Area"),
+            Node {
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                display: Display::Flex,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+        ));
+
+        // Bottom timer container (collapsible)
+        parent.spawn((
+            Name::new("Bottom Timer Container"),
+            BottomTimerMarker,
+            Node {
+                width: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+        ));
     });
 }

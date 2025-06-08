@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::resources::{HourglassConfig, COLOR_PALETTE};
-use crate::ui::LeftPanelMarker;
+use crate::ui::ColorRowMarker;
 
 pub struct ColorPanelPlugin;
 
@@ -18,26 +18,27 @@ struct ColorButton {
 
 fn spawn_color_buttons(
     mut commands: Commands,
-    query: Query<Entity, With<LeftPanelMarker>>,
+    query: Query<Entity, With<ColorRowMarker>>,
 ) {
-    // Find the left panel container
+    // Find the color row container
     if let Ok(panel_entity) = query.single() {
         commands.entity(panel_entity).with_children(|parent| {
             // Add a label
             parent.spawn((
-                Text::new("Colors"),
+                Text::new("Colors:"),
                 TextFont {
-                    font_size: 16.0,
+                    font_size: 14.0,
                     ..default()
                 },
                 TextColor(Color::WHITE),
                 Node {
-                    margin: UiRect::bottom(Val::Px(10.0)),
+                    margin: UiRect::right(Val::Px(10.0)),
+                    align_self: AlignSelf::Center,
                     ..default()
                 },
             ));
 
-            // Add color buttons
+            // Add color buttons in horizontal layout
             for (i, &color) in COLOR_PALETTE.iter().enumerate() {
                 parent.spawn((
                     Name::new(format!("Color Button {}", i)),
@@ -46,10 +47,11 @@ fn spawn_color_buttons(
                     Node {
                         width: Val::Px(40.0),
                         height: Val::Px(40.0),
-                        margin: UiRect::all(Val::Px(5.0)),
+                        margin: UiRect::horizontal(Val::Px(3.0)),
                         border: UiRect::all(Val::Px(2.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
+                        flex_shrink: 0.0, // Prevent shrinking
                         ..default()
                     },
                     BackgroundColor(color),
