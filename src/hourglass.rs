@@ -246,6 +246,8 @@ fn spawn_hourglass(
         })
         .with_sand_splash(SandSplashConfig {
             particle_color: config.color,
+            splash_radius: 20.0,
+            particle_size: 2.0,
             ..Default::default()
         })
         .with_timing(timer_state.duration)
@@ -296,6 +298,8 @@ fn update_hourglass_shape(
             })
             .with_sand_splash(SandSplashConfig {
                 particle_color: config.color,
+                splash_radius: 20.0,
+                particle_size: 2.0,
                 ..Default::default()
             })
             .with_timing(timer_state.duration)
