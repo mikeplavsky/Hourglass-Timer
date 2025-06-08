@@ -290,9 +290,14 @@ fn update_hourglass_shape(
     // Only recreate hourglass if shape type or shape mode changed (not color changes)
     if config.is_changed() && config.shape_mode == ShapeMode::Static {
         // Preserve current hourglass state
-        let (current_upper, current_lower, current_running, current_remaining) =
+        let (_current_upper, _current_lower, _current_running, _current_remaining) =
             if let Ok((_, hourglass)) = query.single() {
-                (hourglass.upper_chamber, hourglass.lower_chamber, hourglass.running, hourglass.remaining_time)
+                (
+                    hourglass.upper_chamber,
+                    hourglass.lower_chamber,
+                    hourglass.running,
+                    hourglass.remaining_time,
+                )
             } else {
                 (0.0, 1.0, false, timer_state.duration)
             };
@@ -450,12 +455,29 @@ fn update_morphing_shape(
         let t = (time.elapsed_secs() % cycle_time) / cycle_time;
 
         // Preserve current hourglass state
-        let (current_upper, current_lower, current_running, current_remaining, current_flipping) =
-            if let Ok((_, hourglass)) = query.single() {
-                (hourglass.upper_chamber, hourglass.lower_chamber, hourglass.running, hourglass.remaining_time, hourglass.flipping)
-            } else {
-                (0.0, 1.0, timer_state.is_running, timer_state.remaining, false)
-            };
+        let (
+            _current_upper,
+            _current_lower,
+            _current_running,
+            _current_remaining,
+            _current_flipping,
+        ) = if let Ok((_, hourglass)) = query.single() {
+            (
+                hourglass.upper_chamber,
+                hourglass.lower_chamber,
+                hourglass.running,
+                hourglass.remaining_time,
+                hourglass.flipping,
+            )
+        } else {
+            (
+                0.0,
+                1.0,
+                timer_state.is_running,
+                timer_state.remaining,
+                false,
+            )
+        };
 
         // Create morphed shape parameters
         let (body_config, plates_config) = get_morphed_shape_config(t);
@@ -502,9 +524,7 @@ fn update_morphing_shape(
 }
 
 // Helper function to create morphed shape configurations
-fn get_morphed_shape_config(
-    t: f32,
-) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
+fn get_morphed_shape_config(t: f32) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
     // Define the 4 shape configurations
     let shapes = [
         HourglassShape::Classic,
@@ -550,58 +570,102 @@ fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
 
 fn interpolate_bulb_style(style1: &BulbStyle, style2: &BulbStyle, t: f32) -> BulbStyle {
     match (style1, style2) {
-        (BulbStyle::Circular { curvature: c1, width_factor: w1, curve_resolution: r1 },
-         BulbStyle::Circular { curvature: c2, width_factor: w2, curve_resolution: r2 }) => {
+        (
             BulbStyle::Circular {
-                curvature: lerp_f32(*c1, *c2, t),
-                width_factor: lerp_f32(*w1, *w2, t),
-                curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(5),
-            }
-        }
+                curvature: c1,
+                width_factor: w1,
+                curve_resolution: r1,
+            },
+            BulbStyle::Circular {
+                curvature: c2,
+                width_factor: w2,
+                curve_resolution: r2,
+            },
+        ) => BulbStyle::Circular {
+            curvature: lerp_f32(*c1, *c2, t),
+            width_factor: lerp_f32(*w1, *w2, t),
+            curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(5),
+        },
         // If styles are different types, just switch at halfway point
         (style1, style2) => {
-            if t < 0.5 { style1.clone() } else { style2.clone() }
+            if t < 0.5 {
+                style1.clone()
+            } else {
+                style2.clone()
+            }
         }
     }
 }
 
 fn interpolate_neck_style(style1: &NeckStyle, style2: &NeckStyle, t: f32) -> NeckStyle {
     match (style1, style2) {
-        (NeckStyle::Curved { curvature: c1, width: w1, height: h1, curve_resolution: r1 },
-         NeckStyle::Curved { curvature: c2, width: w2, height: h2, curve_resolution: r2 }) => {
+        (
             NeckStyle::Curved {
-                curvature: lerp_f32(*c1, *c2, t),
-                width: lerp_f32(*w1, *w2, t),
-                height: lerp_f32(*h1, *h2, t),
-                curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(3),
-            }
-        }
-        (NeckStyle::Straight { width: w1, height: h1 },
-         NeckStyle::Straight { width: w2, height: h2 }) => {
+                curvature: c1,
+                width: w1,
+                height: h1,
+                curve_resolution: r1,
+            },
+            NeckStyle::Curved {
+                curvature: c2,
+                width: w2,
+                height: h2,
+                curve_resolution: r2,
+            },
+        ) => NeckStyle::Curved {
+            curvature: lerp_f32(*c1, *c2, t),
+            width: lerp_f32(*w1, *w2, t),
+            height: lerp_f32(*h1, *h2, t),
+            curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(3),
+        },
+        (
             NeckStyle::Straight {
-                width: lerp_f32(*w1, *w2, t),
-                height: lerp_f32(*h1, *h2, t),
-            }
-        }
+                width: w1,
+                height: h1,
+            },
+            NeckStyle::Straight {
+                width: w2,
+                height: h2,
+            },
+        ) => NeckStyle::Straight {
+            width: lerp_f32(*w1, *w2, t),
+            height: lerp_f32(*h1, *h2, t),
+        },
         // Mixed types - convert straight to curved for interpolation
-        (NeckStyle::Straight { width: w1, height: h1 },
-         NeckStyle::Curved { curvature: c2, width: w2, height: h2, curve_resolution: r2 }) => {
+        (
+            NeckStyle::Straight {
+                width: w1,
+                height: h1,
+            },
             NeckStyle::Curved {
-                curvature: lerp_f32(0.0, *c2, t),
-                width: lerp_f32(*w1, *w2, t),
-                height: lerp_f32(*h1, *h2, t),
-                curve_resolution: *r2,
-            }
-        }
-        (NeckStyle::Curved { curvature: c1, width: w1, height: h1, curve_resolution: r1 },
-         NeckStyle::Straight { width: w2, height: h2 }) => {
+                curvature: c2,
+                width: w2,
+                height: h2,
+                curve_resolution: r2,
+            },
+        ) => NeckStyle::Curved {
+            curvature: lerp_f32(0.0, *c2, t),
+            width: lerp_f32(*w1, *w2, t),
+            height: lerp_f32(*h1, *h2, t),
+            curve_resolution: *r2,
+        },
+        (
             NeckStyle::Curved {
-                curvature: lerp_f32(*c1, 0.0, t),
-                width: lerp_f32(*w1, *w2, t),
-                height: lerp_f32(*h1, *h2, t),
-                curve_resolution: *r1,
-            }
-        }
+                curvature: c1,
+                width: w1,
+                height: h1,
+                curve_resolution: r1,
+            },
+            NeckStyle::Straight {
+                width: w2,
+                height: h2,
+            },
+        ) => NeckStyle::Curved {
+            curvature: lerp_f32(*c1, 0.0, t),
+            width: lerp_f32(*w1, *w2, t),
+            height: lerp_f32(*h1, *h2, t),
+            curve_resolution: *r1,
+        },
     }
 }
 

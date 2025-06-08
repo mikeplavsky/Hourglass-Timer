@@ -1,4 +1,4 @@
-use crate::resources::{COLOR_PALETTE, HourglassConfig, ColorMode};
+use crate::resources::{COLOR_PALETTE, ColorMode, HourglassConfig};
 use crate::ui::ColorRowMarker;
 use bevy::prelude::*;
 use rand::Rng;
@@ -8,7 +8,15 @@ pub struct ColorPanelPlugin;
 impl Plugin for ColorPanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, spawn_color_buttons)
-            .add_systems(Update, (handle_color_button_clicks, handle_random_color_button, handle_rainbow_color_button, update_rainbow_color));
+            .add_systems(
+                Update,
+                (
+                    handle_color_button_clicks,
+                    handle_random_color_button,
+                    handle_rainbow_color_button,
+                    update_rainbow_color,
+                ),
+            );
     }
 }
 
@@ -169,10 +177,7 @@ fn handle_rainbow_color_button(
     }
 }
 
-fn update_rainbow_color(
-    time: Res<Time>,
-    mut config: ResMut<HourglassConfig>,
-) {
+fn update_rainbow_color(time: Res<Time>, mut config: ResMut<HourglassConfig>) {
     if config.color_mode == ColorMode::Rainbow {
         // Cycle through hue over time (0-360 degrees)
         let hue = (time.elapsed_secs() * 60.0) % 360.0; // Complete cycle every 6 seconds
