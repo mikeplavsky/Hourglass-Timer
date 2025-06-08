@@ -53,7 +53,7 @@ impl TimerState {
         self.duration += seconds;
         self.remaining += seconds;
         // Clamp to reasonable values
-        self.duration = self.duration.max(0.0).min(3600.0 * 24.0); // Max 24 hours
+        self.duration = self.duration.clamp(0.0, 3600.0 * 24.0); // Max 24 hours
         self.remaining = self.remaining.max(0.0).min(self.duration);
     }
 
@@ -62,7 +62,7 @@ impl TimerState {
         let hours = total_seconds / 3600;
         let minutes = (total_seconds % 3600) / 60;
         let seconds = total_seconds % 60;
-        format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
     }
 }
 

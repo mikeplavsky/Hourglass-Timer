@@ -21,14 +21,8 @@ pub struct ShapeRowMarker;
 pub struct BottomTimerMarker;
 
 // Resource to track timer panel visibility
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct TimerPanelVisible(pub bool);
-
-impl Default for TimerPanelVisible {
-    fn default() -> Self {
-        Self(false) // Start collapsed
-    }
-}
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {

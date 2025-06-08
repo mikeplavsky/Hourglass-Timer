@@ -225,7 +225,7 @@ fn spawn_shape_buttons(
                 original_x: x_offset, // Store the offset from center
             },
             ShapeButton { shape: *shape }, // Make it clickable
-            Name::new(format!("Mini Hourglass {:?}", shape)),
+            Name::new(format!("Mini Hourglass {shape:?}")),
         ));
     }
 }

@@ -23,7 +23,7 @@ fn spawn_color_buttons(mut commands: Commands, query: Query<Entity, With<ColorRo
             // Add color buttons in horizontal layout
             for (i, &color) in COLOR_PALETTE.iter().enumerate() {
                 parent.spawn((
-                    Name::new(format!("Color Button {}", i)),
+                    Name::new(format!("Color Button {i}")),
                     ColorButton { color },
                     Button,
                     Node {
