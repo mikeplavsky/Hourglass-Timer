@@ -21,6 +21,23 @@ impl Plugin for HourglassPlugin {
 #[derive(Component)]
 pub struct MainHourglass;
 
+#[derive(Component, Default)]
+struct DragState {
+    is_dragging: bool,
+    start_position: Vec2,
+    drag_threshold: f32,
+}
+
+impl DragState {
+    fn new() -> Self {
+        Self {
+            is_dragging: false,
+            start_position: Vec2::ZERO,
+            drag_threshold: 10.0, // Minimum distance in pixels to consider it a drag
+        }
+    }
+}
+
 // Helper function to create main hourglass configurations for different shapes
 fn get_main_shape_config(shape: HourglassShape) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
     let base_height = 400.0; // Full size for main hourglass
@@ -233,7 +250,7 @@ fn spawn_hourglass(
         })
         .with_timing(timer_state.duration)
         .build(&mut commands, &mut meshes, &mut materials);
-    commands.entity(entity).insert((MainHourglass, Name::new("Main Hourglass")));
+    commands.entity(entity).insert((MainHourglass, DragState::new(), Name::new("Main Hourglass")));
 }
 
 fn update_hourglass_color(
@@ -283,7 +300,7 @@ fn update_hourglass_shape(
             })
             .with_timing(timer_state.duration)
             .build(&mut commands, &mut meshes, &mut materials);
-        commands.entity(entity).insert((MainHourglass, Name::new("Main Hourglass")));
+        commands.entity(entity).insert((MainHourglass, DragState::new(), Name::new("Main Hourglass")));
     }
 }
 
@@ -321,28 +338,64 @@ fn handle_hourglass_click(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
-    hourglass_query: Query<&Transform, With<MainHourglass>>,
+    mut hourglass_query: Query<(&Transform, &mut DragState, &mut Hourglass), With<MainHourglass>>,
     mut timer_state: ResMut<TimerState>,
 ) {
-    if mouse_input.just_pressed(MouseButton::Left) {
-        if let Ok(window) = windows.single() {
-            if let Some(cursor_position) = window.cursor_position() {
-                if let Ok((camera, camera_transform)) = camera_query.single() {
-                    if let Ok(hourglass_transform) = hourglass_query.single() {
-                        // Convert screen coordinates to world coordinates
-                        if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
-                            // Check if click is within hourglass bounds (approximate 400x400 area)
-                            let hourglass_pos = hourglass_transform.translation.truncate();
-                            let distance = world_position.distance(hourglass_pos);
+    if let Ok(window) = windows.single() {
+        if let Some(cursor_position) = window.cursor_position() {
+            if let Ok((camera, camera_transform)) = camera_query.single() {
+                if let Ok((hourglass_transform, mut drag_state, mut hourglass)) = hourglass_query.single_mut() {
+                    // Convert screen coordinates to world coordinates
+                    if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+                        // Check if interaction is within hourglass bounds (approximate 400x400 area)
+                        let hourglass_pos = hourglass_transform.translation.truncate();
+                        let distance = world_position.distance(hourglass_pos);
 
-                            if distance < 200.0 { // Half the hourglass size
-                                if timer_state.is_running {
-                                    // Pause the timer if it's running
-                                    timer_state.is_running = false;
-                                } else {
-                                    // Start the timer if it's not running
-                                    timer_state.is_running = true;
+                        if distance < 400.0 { // Larger area to cover most of the hourglass
+                            // Handle mouse down - start potential drag
+                            if mouse_input.just_pressed(MouseButton::Left) {
+                                drag_state.start_position = cursor_position;
+                                drag_state.is_dragging = false;
+                            }
+
+                            // Handle mouse movement during press - detect drag
+                            if mouse_input.pressed(MouseButton::Left) && !drag_state.is_dragging {
+                                let drag_distance = cursor_position.distance(drag_state.start_position);
+                                if drag_distance > drag_state.drag_threshold {
+                                    drag_state.is_dragging = true;
                                 }
+                            }
+
+                            // Handle mouse up - complete action
+                            if mouse_input.just_released(MouseButton::Left) {
+                                if drag_state.is_dragging {
+                                    // Drag detected - flip and reset hourglass
+                                    if hourglass.can_flip() {
+                                        // Immediately set chambers to initial state (all sand in bottom)
+                                        hourglass.upper_chamber = 0.0;
+                                        hourglass.lower_chamber = 1.0;
+
+                                        // Then trigger the flip animation
+                                        hourglass.flip();
+                                        timer_state.reset();
+
+                                        // Start the timer automatically after flip
+                                        timer_state.is_running = true;
+                                    }
+                                } else {
+                                    // Simple click - toggle pause/play
+                                    if timer_state.is_running {
+                                        // Pause the timer if it's running
+                                        timer_state.is_running = false;
+                                    } else {
+                                        // Start the timer if it's not running
+                                        timer_state.is_running = true;
+                                    }
+                                }
+
+                                // Reset drag state
+                                drag_state.is_dragging = false;
+                                drag_state.start_position = Vec2::ZERO;
                             }
                         }
                     }
