@@ -1,4 +1,4 @@
-use crate::resources::{HourglassConfig, HourglassShape, TimerState};
+use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
@@ -15,8 +15,9 @@ impl Plugin for HourglassPlugin {
                 Update,
                 (
                     update_hourglass_color,
-                    update_hourglass_timer,
                     update_hourglass_shape,
+                    update_morphing_shape,
+                    update_hourglass_timer.after(update_morphing_shape),
                     handle_hourglass_click,
                     handle_timer_start,
                 ),
@@ -284,20 +285,32 @@ fn update_hourglass_shape(
     mut materials: ResMut<Assets<ColorMaterial>>,
     config: Res<HourglassConfig>,
     timer_state: Res<TimerState>,
-    query: Query<Entity, With<MainHourglass>>,
+    query: Query<(Entity, &Hourglass), With<MainHourglass>>,
 ) {
-    // Only recreate hourglass if shape specifically changed, not just any config change
-    if config.is_changed() {
-        // Check if we actually need to recreate (shape change requires recreation)
-        // For now, we'll recreate on any config change, but color-only changes
-        // will be handled by update_hourglass_color
+    // Only recreate hourglass if shape type or shape mode changed (not color changes)
+    if config.is_changed() && config.shape_mode == ShapeMode::Static {
+        // Preserve current hourglass state
+        let (current_upper, current_lower, current_running, current_remaining) =
+            if let Ok((_, hourglass)) = query.single() {
+                (hourglass.upper_chamber, hourglass.lower_chamber, hourglass.running, hourglass.remaining_time)
+            } else {
+                (0.0, 1.0, false, timer_state.duration)
+            };
 
         // Despawn the old hourglass
-        for entity in query.iter() {
+        for (entity, _) in query.iter() {
             commands.entity(entity).despawn();
         }
 
-        // Spawn a new hourglass with the new shape and current color
+        // Calculate correct fill percentage based on timer state
+        // fill_percent 1.0 = top chamber full, 0.0 = bottom chamber full
+        let fill_percent = if timer_state.duration > 0.0 {
+            timer_state.remaining / timer_state.duration
+        } else {
+            1.0
+        };
+
+        // Spawn a new hourglass with the new shape and preserved state
         let (body_config, plates_config) = get_main_shape_config(config.shape_type);
 
         let entity = HourglassMeshBuilder::new(Transform::from_xyz(0.0, 0.0, 0.0))
@@ -305,7 +318,7 @@ fn update_hourglass_shape(
             .with_plates(plates_config)
             .with_sand(HourglassMeshSandConfig {
                 color: config.color,
-                fill_percent: 0.0, // Start with bottom bulb filled (empty top)
+                fill_percent,
                 wall_offset: 4.0,
             })
             .with_sand_splash(SandSplashConfig {
@@ -316,11 +329,14 @@ fn update_hourglass_shape(
             })
             .with_timing(timer_state.duration)
             .build(&mut commands, &mut meshes, &mut materials);
+
         commands.entity(entity).insert((
             MainHourglass,
             DragState::new(),
             Name::new("Main Hourglass"),
         ));
+
+        // Note: State will be restored by update_hourglass_timer system
     }
 }
 
@@ -333,23 +349,11 @@ fn update_hourglass_timer(
         hourglass.remaining_time = timer_state.remaining;
         hourglass.running = timer_state.is_running;
 
-        // Update chamber levels based on remaining time
-        if timer_state.duration > 0.0 {
-            if timer_state.is_running && !hourglass.flipping {
-                // When timer is running and not currently flipping, sand flows from top to bottom
-                let progress = timer_state.remaining / timer_state.duration;
-                hourglass.upper_chamber = progress; // Full when time remaining
-                hourglass.lower_chamber = 1.0 - progress; // Empty when time remaining
-            } else if !timer_state.is_running {
-                // When timer is not running, only reset to initial state if timer is at full duration (not started or reset)
-                if timer_state.remaining >= timer_state.duration {
-                    // Initial state: bottom bulb filled
-                    hourglass.upper_chamber = 0.0;
-                    hourglass.lower_chamber = 1.0;
-                }
-                // If paused partway through, maintain current sand levels (don't change chambers)
-            }
-            // Don't manually update chambers during flip animation - let the library handle it
+        // Always update chamber levels based on timer state, regardless of running state
+        if timer_state.duration > 0.0 && !hourglass.flipping {
+            let progress = timer_state.remaining / timer_state.duration;
+            hourglass.upper_chamber = progress; // Amount of time remaining
+            hourglass.lower_chamber = 1.0 - progress; // Amount of time elapsed
         }
     }
 }
@@ -426,6 +430,176 @@ fn handle_hourglass_click(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+fn update_morphing_shape(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    config: Res<HourglassConfig>,
+    timer_state: Res<TimerState>,
+    time: Res<Time>,
+    query: Query<(Entity, &Hourglass), With<MainHourglass>>,
+) {
+    if config.shape_mode == ShapeMode::Morphing {
+        // Cycle through shapes over time (complete cycle every 8 seconds)
+        let cycle_time = 8.0;
+        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
+
+        // Preserve current hourglass state
+        let (current_upper, current_lower, current_running, current_remaining, current_flipping) =
+            if let Ok((_, hourglass)) = query.single() {
+                (hourglass.upper_chamber, hourglass.lower_chamber, hourglass.running, hourglass.remaining_time, hourglass.flipping)
+            } else {
+                (0.0, 1.0, timer_state.is_running, timer_state.remaining, false)
+            };
+
+        // Create morphed shape parameters
+        let (body_config, plates_config) = get_morphed_shape_config(t);
+
+        // Despawn the old hourglass
+        for (entity, _) in query.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        // Calculate correct fill percentage based on timer state
+        // fill_percent 1.0 = top chamber full, 0.0 = bottom chamber full
+        let fill_percent = if timer_state.duration > 0.0 {
+            timer_state.remaining / timer_state.duration
+        } else {
+            1.0
+        };
+
+        // Spawn a new hourglass with the morphed shape and correct sand level
+        let entity = HourglassMeshBuilder::new(Transform::from_xyz(0.0, 0.0, 0.0))
+            .with_body(body_config)
+            .with_plates(plates_config)
+            .with_sand(HourglassMeshSandConfig {
+                color: config.color,
+                fill_percent,
+                wall_offset: 4.0,
+            })
+            .with_sand_splash(SandSplashConfig {
+                particle_color: config.color,
+                splash_radius: 20.0,
+                particle_size: 2.0,
+                ..Default::default()
+            })
+            .with_timing(timer_state.duration)
+            .build(&mut commands, &mut meshes, &mut materials);
+
+        commands.entity(entity).insert((
+            MainHourglass,
+            DragState::new(),
+            Name::new("Main Hourglass"),
+        ));
+
+        // Note: State will be restored by update_hourglass_timer system
+    }
+}
+
+// Helper function to create morphed shape configurations
+fn get_morphed_shape_config(
+    t: f32,
+) -> (HourglassMeshBodyConfig, HourglassMeshPlatesConfig) {
+    // Define the 4 shape configurations
+    let shapes = [
+        HourglassShape::Classic,
+        HourglassShape::Modern,
+        HourglassShape::Slim,
+        HourglassShape::Wide,
+    ];
+
+    // Determine which shapes to interpolate between
+    let segment = t * 4.0; // 0-4 range
+    let segment_index = segment.floor() as usize % 4;
+    let next_index = (segment_index + 1) % 4;
+    let local_t = segment - segment.floor(); // 0-1 within the segment
+
+    let shape1 = shapes[segment_index];
+    let shape2 = shapes[next_index];
+
+    // Get the base configurations for both shapes
+    let (config1, plates1) = get_main_shape_config(shape1);
+    let (config2, plates2) = get_main_shape_config(shape2);
+
+    // Interpolate between the configurations
+    let interpolated_body = HourglassMeshBodyConfig {
+        total_height: lerp_f32(config1.total_height, config2.total_height, local_t),
+        bulb_style: interpolate_bulb_style(&config1.bulb_style, &config2.bulb_style, local_t),
+        neck_style: interpolate_neck_style(&config1.neck_style, &config2.neck_style, local_t),
+        color: Color::srgba(0.85, 0.95, 1.0, 0.2),
+    };
+
+    let interpolated_plates = HourglassMeshPlatesConfig {
+        width: lerp_f32(plates1.width, plates2.width, local_t),
+        height: lerp_f32(plates1.height, plates2.height, local_t),
+        ..Default::default()
+    };
+
+    (interpolated_body, interpolated_plates)
+}
+
+// Helper functions for interpolation
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+fn interpolate_bulb_style(style1: &BulbStyle, style2: &BulbStyle, t: f32) -> BulbStyle {
+    match (style1, style2) {
+        (BulbStyle::Circular { curvature: c1, width_factor: w1, curve_resolution: r1 },
+         BulbStyle::Circular { curvature: c2, width_factor: w2, curve_resolution: r2 }) => {
+            BulbStyle::Circular {
+                curvature: lerp_f32(*c1, *c2, t),
+                width_factor: lerp_f32(*w1, *w2, t),
+                curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(5),
+            }
+        }
+        // If styles are different types, just switch at halfway point
+        (style1, style2) => {
+            if t < 0.5 { style1.clone() } else { style2.clone() }
+        }
+    }
+}
+
+fn interpolate_neck_style(style1: &NeckStyle, style2: &NeckStyle, t: f32) -> NeckStyle {
+    match (style1, style2) {
+        (NeckStyle::Curved { curvature: c1, width: w1, height: h1, curve_resolution: r1 },
+         NeckStyle::Curved { curvature: c2, width: w2, height: h2, curve_resolution: r2 }) => {
+            NeckStyle::Curved {
+                curvature: lerp_f32(*c1, *c2, t),
+                width: lerp_f32(*w1, *w2, t),
+                height: lerp_f32(*h1, *h2, t),
+                curve_resolution: (lerp_f32(*r1 as f32, *r2 as f32, t) as usize).max(3),
+            }
+        }
+        (NeckStyle::Straight { width: w1, height: h1 },
+         NeckStyle::Straight { width: w2, height: h2 }) => {
+            NeckStyle::Straight {
+                width: lerp_f32(*w1, *w2, t),
+                height: lerp_f32(*h1, *h2, t),
+            }
+        }
+        // Mixed types - convert straight to curved for interpolation
+        (NeckStyle::Straight { width: w1, height: h1 },
+         NeckStyle::Curved { curvature: c2, width: w2, height: h2, curve_resolution: r2 }) => {
+            NeckStyle::Curved {
+                curvature: lerp_f32(0.0, *c2, t),
+                width: lerp_f32(*w1, *w2, t),
+                height: lerp_f32(*h1, *h2, t),
+                curve_resolution: *r2,
+            }
+        }
+        (NeckStyle::Curved { curvature: c1, width: w1, height: h1, curve_resolution: r1 },
+         NeckStyle::Straight { width: w2, height: h2 }) => {
+            NeckStyle::Curved {
+                curvature: lerp_f32(*c1, 0.0, t),
+                width: lerp_f32(*w1, *w2, t),
+                height: lerp_f32(*h1, *h2, t),
+                curve_resolution: *r1,
             }
         }
     }

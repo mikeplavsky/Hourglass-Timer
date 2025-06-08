@@ -1,4 +1,4 @@
-use crate::resources::{HourglassConfig, HourglassShape};
+use crate::resources::{HourglassConfig, HourglassShape, ShapeMode};
 use crate::ui::ShapeRowMarker;
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
@@ -9,11 +9,12 @@ pub struct ShapePanelPlugin;
 
 impl Plugin for ShapePanelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, spawn_shape_buttons)
+        app.add_systems(PostStartup, (spawn_shape_buttons, spawn_morphing_button))
             .add_systems(
                 Update,
                 (
                     handle_shape_button_clicks,
+                    handle_morphing_button_clicks,
                     update_mini_hourglass_colors,
                     handle_hover_effects,
                     update_hourglass_layering,
@@ -173,6 +174,9 @@ struct ShapeButton {
 }
 
 #[derive(Component)]
+struct MorphingButton;
+
+#[derive(Component)]
 struct MiniHourglass {
     base_position: Vec3, // Store the original position
     original_x: f32,     // Store the original X position for positioning
@@ -230,6 +234,64 @@ fn spawn_shape_buttons(
     }
 }
 
+fn spawn_morphing_button(mut commands: Commands, query: Query<Entity, With<ShapeRowMarker>>) {
+    if let Ok(panel_entity) = query.single() {
+        commands.entity(panel_entity).with_children(|parent| {
+            // Add Morphing Button to the right side of the shape row
+            parent.spawn((
+                Name::new("Morphing Button"),
+                MorphingButton,
+                Button,
+                Node {
+                    width: Val::Px(60.0),
+                    height: Val::Px(25.0),
+                    margin: UiRect::all(Val::Px(5.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(10.0),
+                    top: Val::Px(12.5),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.6, 0.2)),
+                BorderColor(Color::WHITE),
+                Text::new("MORPH"),
+                TextColor(Color::WHITE),
+            ));
+        });
+    }
+}
+
+fn handle_morphing_button_clicks(
+    mut interaction_query: Query<
+        (&Interaction, &mut BorderColor, &mut BackgroundColor),
+        (Changed<Interaction>, With<MorphingButton>),
+    >,
+    mut config: ResMut<HourglassConfig>,
+) {
+    for (interaction, mut border_color, mut bg_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                if config.shape_mode == ShapeMode::Static {
+                    config.shape_mode = ShapeMode::Morphing;
+                    *bg_color = BackgroundColor(Color::srgb(0.0, 1.0, 0.0)); // Green when active
+                } else {
+                    config.shape_mode = ShapeMode::Static;
+                    *bg_color = BackgroundColor(Color::srgb(0.2, 0.6, 0.2)); // Default green
+                }
+                *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
+            }
+            Interaction::Hovered => {
+                *border_color = BorderColor(Color::srgb(0.8, 0.8, 0.8));
+            }
+            Interaction::None => {
+                *border_color = BorderColor(Color::WHITE);
+            }
+        }
+    }
+}
+
 fn handle_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -255,6 +317,7 @@ fn handle_shape_button_clicks(
 
                             if distance < click_radius {
                                 config.shape_type = shape_button.shape;
+                                config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
                                 break;
                             }
                         }

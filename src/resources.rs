@@ -5,6 +5,15 @@ use bevy::prelude::*;
 pub struct HourglassConfig {
     pub color: Color,
     pub shape_type: HourglassShape,
+    pub color_mode: ColorMode,
+    pub shape_mode: ShapeMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ColorMode {
+    Static,
+    Random,
+    Rainbow,
 }
 
 impl Default for HourglassConfig {
@@ -12,6 +21,8 @@ impl Default for HourglassConfig {
         Self {
             color: Color::srgb(0.8, 0.6, 0.2), // Sandy color
             shape_type: HourglassShape::Classic,
+            color_mode: ColorMode::Static,
+            shape_mode: ShapeMode::Static,
         }
     }
 }
@@ -23,6 +34,12 @@ pub enum HourglassShape {
     Slim,
     Wide,
     // Add more shapes as needed
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ShapeMode {
+    Static,
+    Morphing,
 }
 
 /// Resource to manage the countdown timer
