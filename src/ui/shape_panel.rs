@@ -57,7 +57,8 @@ fn handle_hover_effects(
                     // Check if hovering over the morphing button
                     if currently_hovered.is_none() {
                         if let Ok((entity, transform)) = morphing_button_query.single() {
-                            let distance = world_position.distance(transform.translation.truncate());
+                            let distance =
+                                world_position.distance(transform.translation.truncate());
                             let detection_radius = 20.0 * transform.scale.x;
 
                             if distance < detection_radius {
@@ -95,11 +96,10 @@ fn update_hourglass_layering(
         &ShapeButton,
         Option<&HoveredHourglass>,
     )>,
-    mut morphing_button_query: Query<(
-        &mut Transform,
-        &MiniHourglass,
-        Option<&HoveredHourglass>,
-    ), (With<MorphingButton>, Without<ShapeButton>)>,
+    mut morphing_button_query: Query<
+        (&mut Transform, &MiniHourglass, Option<&HoveredHourglass>),
+        (With<MorphingButton>, Without<ShapeButton>),
+    >,
 ) {
     // Handle regular hourglass buttons
     for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
@@ -276,10 +276,7 @@ fn spawn_shape_buttons(
     }
 }
 
-fn spawn_morphing_button(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn spawn_morphing_button(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
     // Create the morphing button as a 3D object positioned alongside the hourglasses
     let x_offset = 100.0; // Position after the 4th hourglass
 
@@ -287,16 +284,18 @@ fn spawn_morphing_button(
     let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
     // Create a simple rectangle background for the button
-    let button_entity = commands.spawn((
-        Name::new("Morphing Button 3D"),
-        MorphingButton,
-        Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-        Transform::from_translation(temp_position),
-        MiniHourglass {
-            base_position: temp_position,
-            original_x: x_offset,
-        },
-    )).id();
+    let button_entity = commands
+        .spawn((
+            Name::new("Morphing Button 3D"),
+            MorphingButton,
+            Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+            Transform::from_translation(temp_position),
+            MiniHourglass {
+                base_position: temp_position,
+                original_x: x_offset,
+            },
+        ))
+        .id();
 
     // Create the "?" text as a child entity
     commands.entity(button_entity).with_children(|parent| {

@@ -57,128 +57,132 @@ fn spawn_color_buttons(mut commands: Commands, query: Query<Entity, With<ColorRo
             }
 
             // Add Random Color Button with multi-colored squares pattern
-            parent.spawn((
-                Name::new("Random Color Button"),
-                RandomColorButton,
-                Button,
-                Node {
-                    width: Val::Px(32.0),
-                    height: Val::Px(20.0),
-                    margin: UiRect::horizontal(Val::Px(2.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    justify_content: JustifyContent::SpaceBetween,
-                    align_items: AlignItems::Center,
-                    flex_shrink: 0.0,
-                    flex_direction: FlexDirection::Row,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-                BorderColor(Color::WHITE),
-            )).with_children(|parent| {
-                // Left question mark
-                parent.spawn((
-                    Text::new("?"),
-                    TextColor(Color::WHITE),
+            parent
+                .spawn((
+                    Name::new("Random Color Button"),
+                    RandomColorButton,
+                    Button,
                     Node {
+                        width: Val::Px(32.0),
+                        height: Val::Px(20.0),
+                        margin: UiRect::horizontal(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        flex_shrink: 0.0,
+                        flex_direction: FlexDirection::Row,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    // Left question mark
+                    parent.spawn((
+                        Text::new("?"),
+                        TextColor(Color::WHITE),
+                        Node {
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                    ));
+
+                    // Create a 2x2 grid of colored squares to represent randomness
+                    parent
+                        .spawn((Node {
+                            display: Display::Grid,
+                            grid_template_columns: vec![GridTrack::px(8.0), GridTrack::px(8.0)],
+                            grid_template_rows: vec![GridTrack::px(8.0), GridTrack::px(8.0)],
+                            column_gap: Val::Px(1.0),
+                            row_gap: Val::Px(1.0),
+                            ..default()
+                        },))
+                        .with_children(|grid| {
+                            // Four small colored squares
+                            let colors = [
+                                Color::srgb(1.0, 0.2, 0.2), // Red
+                                Color::srgb(0.2, 1.0, 0.2), // Green
+                                Color::srgb(0.2, 0.2, 1.0), // Blue
+                                Color::srgb(1.0, 1.0, 0.2), // Yellow
+                            ];
+
+                            for color in colors {
+                                grid.spawn((
+                                    Node {
+                                        width: Val::Px(8.0),
+                                        height: Val::Px(8.0),
+                                        ..default()
+                                    },
+                                    BackgroundColor(color),
+                                ));
+                            }
+                        });
+
+                    // Right question mark
+                    parent.spawn((
+                        TextColor(Color::WHITE),
+                        Text::new(" "),
+                        Node {
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                    ));
+                });
+
+            // Add Rainbow Color Button with gradient stripes
+            parent
+                .spawn((
+                    Name::new("Rainbow Color Button"),
+                    RainbowColorButton,
+                    Button,
+                    Node {
+                        width: Val::Px(36.0),
+                        height: Val::Px(20.0),
+                        margin: UiRect::horizontal(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(1.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
+                        flex_shrink: 0.0,
+                        flex_direction: FlexDirection::Row,
                         ..default()
                     },
-                ));
-
-                // Create a 2x2 grid of colored squares to represent randomness
-                parent.spawn((
-                    Node {
-                        display: Display::Grid,
-                        grid_template_columns: vec![GridTrack::px(8.0), GridTrack::px(8.0)],
-                        grid_template_rows: vec![GridTrack::px(8.0), GridTrack::px(8.0)],
-                        column_gap: Val::Px(1.0),
-                        row_gap: Val::Px(1.0),
-                        ..default()
-                    },
-                )).with_children(|grid| {
-                    // Four small colored squares
-                    let colors = [
-                        Color::srgb(1.0, 0.2, 0.2), // Red
-                        Color::srgb(0.2, 1.0, 0.2), // Green
-                        Color::srgb(0.2, 0.2, 1.0), // Blue
-                        Color::srgb(1.0, 1.0, 0.2), // Yellow
+                    BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+                    BorderColor(Color::WHITE),
+                ))
+                .with_children(|parent| {
+                    // Create rainbow stripes with more colors for seamless transition
+                    let rainbow_colors = [
+                        Color::srgb(1.0, 0.0, 0.0),  // Red
+                        Color::srgb(1.0, 0.25, 0.0), // Red-Orange
+                        Color::srgb(1.0, 0.5, 0.0),  // Orange
+                        Color::srgb(1.0, 0.75, 0.0), // Orange-Yellow
+                        Color::srgb(1.0, 1.0, 0.0),  // Yellow
+                        Color::srgb(0.75, 1.0, 0.0), // Yellow-Green
+                        Color::srgb(0.5, 1.0, 0.0),  // Lime Green
+                        Color::srgb(0.25, 1.0, 0.0), // Light Green
+                        Color::srgb(0.0, 1.0, 0.0),  // Green
+                        Color::srgb(0.0, 1.0, 0.5),  // Green-Cyan
+                        Color::srgb(0.0, 1.0, 1.0),  // Cyan
+                        Color::srgb(0.0, 0.5, 1.0),  // Light Blue
+                        Color::srgb(0.0, 0.0, 1.0),  // Blue
+                        Color::srgb(0.25, 0.0, 1.0), // Blue-Violet
+                        Color::srgb(0.5, 0.0, 1.0),  // Purple
+                        Color::srgb(0.75, 0.0, 1.0), // Violet
                     ];
 
-                    for color in colors {
-                        grid.spawn((
+                    for color in rainbow_colors {
+                        parent.spawn((
                             Node {
-                                width: Val::Px(8.0),
-                                height: Val::Px(8.0),
+                                width: Val::Px(2.0), // Narrower stripes to fit more colors
+                                height: Val::Px(18.0),
                                 ..default()
                             },
                             BackgroundColor(color),
                         ));
                     }
                 });
-
-                // Right question mark
-                parent.spawn((
-                    TextColor(Color::WHITE),
-                    Text::new(" "),
-                    Node {
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                ));
-            });
-
-            // Add Rainbow Color Button with gradient stripes
-            parent.spawn((
-                Name::new("Rainbow Color Button"),
-                RainbowColorButton,
-                Button,
-                Node {
-                    width: Val::Px(36.0),
-                    height: Val::Px(20.0),
-                    margin: UiRect::horizontal(Val::Px(2.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    flex_shrink: 0.0,
-                    flex_direction: FlexDirection::Row,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
-                BorderColor(Color::WHITE),
-            )).with_children(|parent| {
-                // Create rainbow stripes with more colors for seamless transition
-                let rainbow_colors = [
-                    Color::srgb(1.0, 0.0, 0.0),   // Red
-                    Color::srgb(1.0, 0.25, 0.0),  // Red-Orange
-                    Color::srgb(1.0, 0.5, 0.0),   // Orange
-                    Color::srgb(1.0, 0.75, 0.0),  // Orange-Yellow
-                    Color::srgb(1.0, 1.0, 0.0),   // Yellow
-                    Color::srgb(0.75, 1.0, 0.0),  // Yellow-Green
-                    Color::srgb(0.5, 1.0, 0.0),   // Lime Green
-                    Color::srgb(0.25, 1.0, 0.0),  // Light Green
-                    Color::srgb(0.0, 1.0, 0.0),   // Green
-                    Color::srgb(0.0, 1.0, 0.5),   // Green-Cyan
-                    Color::srgb(0.0, 1.0, 1.0),   // Cyan
-                    Color::srgb(0.0, 0.5, 1.0),   // Light Blue
-                    Color::srgb(0.0, 0.0, 1.0),   // Blue
-                    Color::srgb(0.25, 0.0, 1.0),  // Blue-Violet
-                    Color::srgb(0.5, 0.0, 1.0),   // Purple
-                    Color::srgb(0.75, 0.0, 1.0),  // Violet
-                ];
-
-                for color in rainbow_colors {
-                    parent.spawn((
-                        Node {
-                            width: Val::Px(2.0), // Narrower stripes to fit more colors
-                            height: Val::Px(18.0),
-                            ..default()
-                        },
-                        BackgroundColor(color),
-                    ));
-                }
-            });
         });
     }
 }

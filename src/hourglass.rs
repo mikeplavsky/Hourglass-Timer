@@ -290,18 +290,23 @@ fn update_hourglass_shape(
     // Only recreate hourglass if shape type or shape mode changed (not color changes)
     if config.is_changed() && config.shape_mode == ShapeMode::Static {
         // Preserve current hourglass state and drag state
-        let (_current_upper, _current_lower, _current_running, _current_remaining, current_drag_state) =
-            if let Ok((_, hourglass, drag_state)) = query.single() {
-                (
-                    hourglass.upper_chamber,
-                    hourglass.lower_chamber,
-                    hourglass.running,
-                    hourglass.remaining_time,
-                    drag_state.clone(),
-                )
-            } else {
-                (0.0, 1.0, false, timer_state.duration, DragState::new())
-            };
+        let (
+            _current_upper,
+            _current_lower,
+            _current_running,
+            _current_remaining,
+            current_drag_state,
+        ) = if let Ok((_, hourglass, drag_state)) = query.single() {
+            (
+                hourglass.upper_chamber,
+                hourglass.lower_chamber,
+                hourglass.running,
+                hourglass.remaining_time,
+                drag_state.clone(),
+            )
+        } else {
+            (0.0, 1.0, false, timer_state.duration, DragState::new())
+        };
 
         // Despawn the old hourglass
         for (entity, _, _) in query.iter() {
