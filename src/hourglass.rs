@@ -15,7 +15,6 @@ impl Plugin for HourglassPlugin {
                 Update,
                 (
                     update_hourglass_color,
-                    update_static_hourglass_color,
                     update_hourglass_shape,
                     update_morphing_shape,
                     update_hourglass_timer.after(update_morphing_shape),
@@ -270,80 +269,16 @@ fn spawn_hourglass(
 }
 
 fn update_hourglass_color(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    config: Res<HourglassConfig>,
-    timer_state: Res<TimerState>,
-    query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
-) {
-    if config.is_changed() {
-        // For Random and Rainbow modes, recreate the hourglass to update particle colors
-        match config.color_mode {
-            crate::resources::ColorMode::Random | crate::resources::ColorMode::Rainbow => {
-                // Preserve current drag state
-                let current_drag_state = if let Ok((_, _, drag_state)) = query.single() {
-                    drag_state.clone()
-                } else {
-                    DragState::new()
-                };
-
-                // Despawn the old hourglass
-                for (entity, _, _) in query.iter() {
-                    commands.entity(entity).despawn();
-                }
-
-                // Calculate correct fill percentage based on timer state
-                let fill_percent = if timer_state.duration > 0.0 {
-                    timer_state.remaining / timer_state.duration
-                } else {
-                    1.0
-                };
-
-                // Spawn a new hourglass with updated colors
-                let (body_config, plates_config) = get_main_shape_config(config.shape_type);
-
-                let entity = HourglassMeshBuilder::new(Transform::from_xyz(0.0, 0.0, 0.0))
-                    .with_body(body_config)
-                    .with_plates(plates_config)
-                    .with_sand(HourglassMeshSandConfig {
-                        color: config.color,
-                        fill_percent,
-                        wall_offset: 4.0,
-                    })
-                    .with_sand_splash(SandSplashConfig {
-                        particle_color: config.color,
-                        splash_radius: 20.0,
-                        particle_size: 2.0,
-                        ..Default::default()
-                    })
-                    .with_timing(timer_state.duration)
-                    .build(&mut commands, &mut meshes, &mut materials);
-
-                commands.entity(entity).insert((
-                    MainHourglass,
-                    current_drag_state,
-                    Name::new("Main Hourglass"),
-                ));
-            }
-            crate::resources::ColorMode::Static => {
-                // For static mode, just update sand color without recreating
-                // This will be handled by update_static_hourglass_color system
-            }
-        }
-    }
-}
-
-fn update_static_hourglass_color(
     config: Res<HourglassConfig>,
     mut query: Query<&mut Hourglass, With<MainHourglass>>,
 ) {
-    if config.is_changed() && config.color_mode == crate::resources::ColorMode::Static {
+    if config.is_changed() {
         for mut hourglass in query.iter_mut() {
             hourglass.sand_color = config.color;
         }
     }
 }
+
 
 fn update_hourglass_shape(
     mut commands: Commands,
@@ -353,7 +288,7 @@ fn update_hourglass_shape(
     timer_state: Res<TimerState>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
 ) {
-    // Only recreate hourglass if shape type or shape mode changed (not color changes)
+    // Only handle static shape mode, and only recreate hourglass if shape type changed (not color changes)
     if config.is_changed() && config.shape_mode == ShapeMode::Static {
         // Preserve current hourglass state and drag state
         let (
@@ -520,8 +455,17 @@ fn update_morphing_shape(
     timer_state: Res<TimerState>,
     time: Res<Time>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
+    mut last_update_time: Local<f32>,
 ) {
+    // Only handle morphing shape mode, and throttle updates to avoid excessive recreation
     if config.shape_mode == ShapeMode::Morphing {
+        // Throttle updates to every 0.1 seconds (10 FPS) instead of every frame
+        let current_time = time.elapsed_secs();
+        if current_time - *last_update_time < 0.1 {
+            return;
+        }
+        *last_update_time = current_time;
+
         // Preserve current hourglass state and drag state
         let (
             _current_upper,
@@ -557,7 +501,7 @@ fn update_morphing_shape(
 
         // Cycle through shapes over time (complete cycle every 8 seconds)
         let cycle_time = 8.0;
-        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
+        let t = (current_time % cycle_time) / cycle_time;
 
         // Create morphed shape parameters
         let (body_config, plates_config) = get_morphed_shape_config(t);
