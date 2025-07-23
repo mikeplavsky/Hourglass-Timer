@@ -2,7 +2,7 @@ use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
-    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplashConfig,
+    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash, SandSplashConfig,
 };
 
 pub struct HourglassPlugin;
@@ -270,11 +270,18 @@ fn spawn_hourglass(
 
 fn update_hourglass_color(
     config: Res<HourglassConfig>,
-    mut query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut splash_query: Query<&mut SandSplash, With<MainHourglass>>,
 ) {
     if config.is_changed() {
-        for mut hourglass in query.iter_mut() {
+        // Update sand color
+        for mut hourglass in hourglass_query.iter_mut() {
             hourglass.sand_color = config.color;
+        }
+        
+        // Update particle color for sand splash
+        for mut sand_splash in splash_query.iter_mut() {
+            sand_splash.config.particle_color = config.color;
         }
     }
 }
