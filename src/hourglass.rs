@@ -2,7 +2,7 @@ use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
-    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplashConfig,
+    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash, SandSplashConfig,
 };
 
 pub struct HourglassPlugin;
@@ -270,14 +270,22 @@ fn spawn_hourglass(
 
 fn update_hourglass_color(
     config: Res<HourglassConfig>,
-    mut query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut splash_query: Query<&mut SandSplash, With<MainHourglass>>,
 ) {
     if config.is_changed() {
-        for mut hourglass in query.iter_mut() {
+        // Update sand color
+        for mut hourglass in hourglass_query.iter_mut() {
             hourglass.sand_color = config.color;
+        }
+        
+        // Update particle color for sand splash
+        for mut sand_splash in splash_query.iter_mut() {
+            sand_splash.config.particle_color = config.color;
         }
     }
 }
+
 
 fn update_hourglass_shape(
     mut commands: Commands,
@@ -287,7 +295,7 @@ fn update_hourglass_shape(
     timer_state: Res<TimerState>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
 ) {
-    // Only recreate hourglass if shape type or shape mode changed (not color changes)
+    // Only handle static shape mode, and only recreate hourglass if shape type changed (not color changes)
     if config.is_changed() && config.shape_mode == ShapeMode::Static {
         // Preserve current hourglass state and drag state
         let (
@@ -454,8 +462,17 @@ fn update_morphing_shape(
     timer_state: Res<TimerState>,
     time: Res<Time>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
+    mut last_update_time: Local<f32>,
 ) {
+    // Only handle morphing shape mode, and throttle updates to avoid excessive recreation
     if config.shape_mode == ShapeMode::Morphing {
+        // Throttle updates to every 0.1 seconds (10 FPS) instead of every frame
+        let current_time = time.elapsed_secs();
+        if current_time - *last_update_time < 0.1 {
+            return;
+        }
+        *last_update_time = current_time;
+
         // Preserve current hourglass state and drag state
         let (
             _current_upper,
@@ -491,7 +508,7 @@ fn update_morphing_shape(
 
         // Cycle through shapes over time (complete cycle every 8 seconds)
         let cycle_time = 8.0;
-        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
+        let t = (current_time % cycle_time) / cycle_time;
 
         // Create morphed shape parameters
         let (body_config, plates_config) = get_morphed_shape_config(t);
