@@ -466,9 +466,8 @@ fn update_morphing_shape(
 ) {
     // Only handle morphing shape mode, and throttle updates to avoid excessive recreation
     if config.shape_mode == ShapeMode::Morphing {
-        // Throttle updates to every 0.1 seconds (10 FPS) instead of every frame
         let current_time = time.elapsed_secs();
-        if current_time - *last_update_time < 0.1 {
+        if current_time - *last_update_time < 0.01 {
             return;
         }
         *last_update_time = current_time;
