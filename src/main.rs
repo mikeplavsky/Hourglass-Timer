@@ -2,7 +2,7 @@
 #![cfg_attr(bevy_lint, feature(register_tool), register_tool(bevy))]
 
 mod hourglass;
-mod resources;
+pub mod resources;
 mod timer;
 mod ui;
 
