@@ -2,7 +2,8 @@ use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode, Ti
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
-    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash, SandSplashConfig,
+    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash,
+    SandSplashConfig,
 };
 
 pub struct HourglassPlugin;
@@ -278,14 +279,13 @@ fn update_hourglass_color(
         for mut hourglass in hourglass_query.iter_mut() {
             hourglass.sand_color = config.color;
         }
-        
+
         // Update particle color for sand splash
         for mut sand_splash in splash_query.iter_mut() {
             sand_splash.config.particle_color = config.color;
         }
     }
 }
-
 
 fn update_hourglass_shape(
     mut commands: Commands,
@@ -302,9 +302,9 @@ fn update_hourglass_shape(
     // Only handle static shape mode
     if config.shape_mode == ShapeMode::Static {
         // Check if shape type or shape mode actually changed
-        let shape_changed = last_shape_type.map_or(true, |last| last != config.shape_type);
-        let mode_changed = last_shape_mode.map_or(true, |last| last != config.shape_mode);
-        
+        let shape_changed = last_shape_type.is_none_or(|last| last != config.shape_type);
+        let mode_changed = last_shape_mode.is_none_or(|last| last != config.shape_mode);
+
         // For shape/mode changes, recreate immediately
         if shape_changed || mode_changed {
             *last_shape_type = Some(config.shape_type);
@@ -342,7 +342,14 @@ fn update_hourglass_shape(
                 drag_state.clone(),
             )
         } else {
-            (0.0, 1.0, false, timer_state.duration, false, DragState::new())
+            (
+                0.0,
+                1.0,
+                false,
+                timer_state.duration,
+                false,
+                DragState::new(),
+            )
         };
 
         // Don't interrupt the hourglass if it's currently flipping
