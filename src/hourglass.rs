@@ -1,8 +1,9 @@
-use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
+use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
-    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplashConfig,
+    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash,
+    SandSplashConfig,
 };
 
 pub struct HourglassPlugin;
@@ -270,11 +271,18 @@ fn spawn_hourglass(
 
 fn update_hourglass_color(
     config: Res<HourglassConfig>,
-    mut query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut splash_query: Query<&mut SandSplash, With<MainHourglass>>,
 ) {
     if config.is_changed() {
-        for mut hourglass in query.iter_mut() {
+        // Update sand color
+        for mut hourglass in hourglass_query.iter_mut() {
             hourglass.sand_color = config.color;
+        }
+
+        // Update particle color for sand splash
+        for mut sand_splash in splash_query.iter_mut() {
+            sand_splash.config.particle_color = config.color;
         }
     }
 }
@@ -285,16 +293,44 @@ fn update_hourglass_shape(
     mut materials: ResMut<Assets<ColorMaterial>>,
     config: Res<HourglassConfig>,
     timer_state: Res<TimerState>,
+    time: Res<Time>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
+    mut last_shape_type: Local<Option<HourglassShape>>,
+    mut last_shape_mode: Local<Option<ShapeMode>>,
+    mut last_recreation_time: Local<f32>,
 ) {
-    // Only recreate hourglass if shape type or shape mode changed (not color changes)
-    if config.is_changed() && config.shape_mode == ShapeMode::Static {
+    // Only handle static shape mode
+    if config.shape_mode == ShapeMode::Static {
+        // Check if shape type or shape mode actually changed
+        let shape_changed = last_shape_type.is_none_or(|last| last != config.shape_type);
+        let mode_changed = last_shape_mode.is_none_or(|last| last != config.shape_mode);
+
+        // For shape/mode changes, recreate immediately
+        if shape_changed || mode_changed {
+            *last_shape_type = Some(config.shape_type);
+            *last_shape_mode = Some(config.shape_mode);
+            *last_recreation_time = time.elapsed_secs();
+        }
+        // For color-only changes in rainbow mode, throttle recreation to allow particles but update colors
+        else if config.is_changed() && config.color_mode == ColorMode::Rainbow {
+            let current_time = time.elapsed_secs();
+            // Only recreate every 0.1 seconds (10 FPS) to balance color updates with particle visibility
+            if current_time - *last_recreation_time < 0.1 {
+                return; // Throttle recreation to prevent particle issues
+            }
+            *last_recreation_time = current_time;
+        }
+        // For non-rainbow color changes, don't recreate (let update_hourglass_color handle it)
+        else if !shape_changed && !mode_changed {
+            return;
+        }
         // Preserve current hourglass state and drag state
         let (
             _current_upper,
             _current_lower,
             _current_running,
             _current_remaining,
+            current_flipping,
             current_drag_state,
         ) = if let Ok((_, hourglass, drag_state)) = query.single() {
             (
@@ -302,11 +338,24 @@ fn update_hourglass_shape(
                 hourglass.lower_chamber,
                 hourglass.running,
                 hourglass.remaining_time,
+                hourglass.flipping,
                 drag_state.clone(),
             )
         } else {
-            (0.0, 1.0, false, timer_state.duration, DragState::new())
+            (
+                0.0,
+                1.0,
+                false,
+                timer_state.duration,
+                false,
+                DragState::new(),
+            )
         };
+
+        // Don't interrupt the hourglass if it's currently flipping
+        if current_flipping {
+            return;
+        }
 
         // Despawn the old hourglass
         for (entity, _, _) in query.iter() {
@@ -454,8 +503,16 @@ fn update_morphing_shape(
     timer_state: Res<TimerState>,
     time: Res<Time>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
+    mut last_update_time: Local<f32>,
 ) {
+    // Only handle morphing shape mode, and throttle updates to avoid excessive recreation
     if config.shape_mode == ShapeMode::Morphing {
+        let current_time = time.elapsed_secs();
+        if current_time - *last_update_time < 0.01 {
+            return;
+        }
+        *last_update_time = current_time;
+
         // Preserve current hourglass state and drag state
         let (
             _current_upper,
@@ -491,7 +548,7 @@ fn update_morphing_shape(
 
         // Cycle through shapes over time (complete cycle every 8 seconds)
         let cycle_time = 8.0;
-        let t = (time.elapsed_secs() % cycle_time) / cycle_time;
+        let t = (current_time % cycle_time) / cycle_time;
 
         // Create morphed shape parameters
         let (body_config, plates_config) = get_morphed_shape_config(t);
