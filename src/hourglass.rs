@@ -318,7 +318,7 @@ fn update_hourglass_shape(
         else if config.is_changed() && config.color_mode == ColorMode::Rainbow {
             let current_time = time.elapsed_secs();
             // Only recreate every 0.1 seconds (10 FPS) to balance color updates with particle visibility
-            if current_time - *last_recreation_time < 0.1 {
+            if current_time - *last_recreation_time < 0.01 {
                 return; // Throttle recreation to prevent particle issues
             }
             *last_recreation_time = current_time;
