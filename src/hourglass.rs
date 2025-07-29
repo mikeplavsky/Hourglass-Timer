@@ -298,17 +298,20 @@ fn update_hourglass_shape(
     mut last_shape_type: Local<Option<HourglassShape>>,
     mut last_shape_mode: Local<Option<ShapeMode>>,
     mut last_recreation_time: Local<f32>,
+    mut last_color_mode: Local<Option<ColorMode>>,
 ) {
     // Only handle static shape mode
     if config.shape_mode == ShapeMode::Static {
         // Check if shape type or shape mode actually changed
         let shape_changed = last_shape_type.is_none_or(|last| last != config.shape_type);
         let mode_changed = last_shape_mode.is_none_or(|last| last != config.shape_mode);
+        let color_mode_changed = last_color_mode.is_none_or(|last| last != config.color_mode);
 
         // For shape/mode changes, recreate immediately
-        if shape_changed || mode_changed {
+        if shape_changed || mode_changed || color_mode_changed {
             *last_shape_type = Some(config.shape_type);
             *last_shape_mode = Some(config.shape_mode);
+            *last_color_mode = Some(config.color_mode);
             *last_recreation_time = time.elapsed_secs();
         }
         // For color-only changes in rainbow mode, throttle recreation to allow particles but update colors
@@ -320,8 +323,13 @@ fn update_hourglass_shape(
             }
             *last_recreation_time = current_time;
         }
-        // For non-rainbow color changes, don't recreate (let update_hourglass_color handle it)
-        else if !shape_changed && !mode_changed {
+        // For static color changes, recreate to ensure color is applied properly
+        else if config.is_changed() && config.color_mode == ColorMode::Static {
+            // Always recreate for static color changes to ensure proper color update
+            *last_recreation_time = time.elapsed_secs();
+        }
+        // For other cases where nothing changed, return early
+        else if !shape_changed && !mode_changed && !config.is_changed() {
             return;
         }
         // Preserve current hourglass state and drag state
