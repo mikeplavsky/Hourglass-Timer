@@ -48,6 +48,10 @@ fn handle_hover_effects(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mini_hourglass_query: Query<(Entity, &Transform, &ShapeButton), With<MiniHourglass>>,
     morphing_button_query: Query<(Entity, &Transform), (With<MorphingButton>, With<MiniHourglass>)>,
+    random_shape_button_query: Query<
+        (Entity, &Transform),
+        (With<RandomShapeButton>, With<MiniHourglass>),
+    >,
     hovered_query: Query<Entity, With<HoveredHourglass>>,
 ) {
     if let Ok(window) = windows.single() {
@@ -68,6 +72,19 @@ fn handle_hover_effects(
                         if distance < detection_radius {
                             currently_hovered = Some(entity);
                             break;
+                        }
+                    }
+
+                    // Check if hovering over the random shape button
+                    if currently_hovered.is_none() {
+                        if let Ok((entity, transform)) = random_shape_button_query.single() {
+                            let distance =
+                                world_position.distance(transform.translation.truncate());
+                            let detection_radius = 20.0 * transform.scale.x;
+
+                            if distance < detection_radius {
+                                currently_hovered = Some(entity);
+                            }
                         }
                     }
 
