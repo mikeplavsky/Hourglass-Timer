@@ -1,27 +1,44 @@
 use crate::resources::{HourglassConfig, HourglassShape, ShapeMode};
 use crate::ui::ShapeRowMarker;
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
+use rand::Rng;
 
 use crate::hourglass::get_mini_shape_config;
+
+// Bevy's default font is an ASCII-only FiraMono subset. We embed Fira Sans
+// Regular into the binary so the shape-row buttons can render non-ASCII
+// glyphs (e.g. ∞) without needing a sibling `assets/` directory at runtime.
+const SHAPE_BUTTON_FONT: &str = "embedded://hourglass_timer/ui/fonts/FiraSans-Regular.ttf";
 
 pub struct ShapePanelPlugin;
 
 impl Plugin for ShapePanelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, (spawn_shape_buttons, spawn_morphing_button))
-            .add_systems(
-                Update,
-                (
-                    handle_shape_button_clicks,
-                    handle_morphing_button_clicks,
-                    update_mini_hourglass_colors,
-                    handle_hover_effects,
-                    update_hourglass_layering,
-                    update_hover_timers,
-                    update_mini_hourglass_positions,
-                ),
-            );
+        embedded_asset!(app, "fonts/FiraSans-Regular.ttf");
+
+        app.add_systems(
+            PostStartup,
+            (
+                spawn_shape_buttons,
+                spawn_random_shape_button,
+                spawn_morphing_button,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_shape_button_clicks,
+                handle_random_shape_button_clicks,
+                handle_morphing_button_clicks,
+                update_mini_hourglass_colors,
+                handle_hover_effects,
+                update_hourglass_layering,
+                update_hover_timers,
+                update_mini_hourglass_positions,
+            ),
+        );
     }
 }
 
@@ -100,6 +117,14 @@ fn update_hourglass_layering(
         (&mut Transform, &MiniHourglass, Option<&HoveredHourglass>),
         (With<MorphingButton>, Without<ShapeButton>),
     >,
+    mut random_shape_button_query: Query<
+        (&mut Transform, &MiniHourglass, Option<&HoveredHourglass>),
+        (
+            With<RandomShapeButton>,
+            Without<ShapeButton>,
+            Without<MorphingButton>,
+        ),
+    >,
 ) {
     // Handle regular hourglass buttons
     for (mut transform, mini_hourglass, shape_button, hovered) in mini_hourglass_query.iter_mut() {
@@ -144,6 +169,16 @@ fn update_hourglass_layering(
         transform.scale = Vec3::splat(scale);
 
         // Keep original position
+        transform.translation = base_position;
+    }
+
+    // Handle random shape button (no persistent selected state — momentary action)
+    if let Ok((mut transform, mini_hourglass, hovered)) = random_shape_button_query.single_mut() {
+        let base_position = mini_hourglass.base_position;
+
+        let scale = if hovered.is_some() { 1.3 } else { 1.0 };
+
+        transform.scale = Vec3::splat(scale);
         transform.translation = base_position;
     }
 }
@@ -219,6 +254,9 @@ struct ShapeButton {
 struct MorphingButton;
 
 #[derive(Component)]
+struct RandomShapeButton;
+
+#[derive(Component)]
 struct MiniHourglass {
     base_position: Vec3, // Store the original position
     original_x: f32,     // Store the original X position for positioning
@@ -276,14 +314,15 @@ fn spawn_shape_buttons(
     }
 }
 
-fn spawn_morphing_button(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
-    // Create the morphing button as a 3D object positioned alongside the hourglasses
-    let x_offset = 100.0; // Position after the 4th hourglass
+fn spawn_morphing_button(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
+) {
+    let x_offset = 150.0;
 
-    // Start with a temporary position - will be updated by update_mini_hourglass_positions
     let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
-    // Create a simple rectangle background for the button
     let button_entity = commands
         .spawn((
             Name::new("Morphing Button 3D"),
@@ -297,19 +336,95 @@ fn spawn_morphing_button(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>
         ))
         .id();
 
-    // Create the "?" text as a child entity
     commands.entity(button_entity).with_children(|parent| {
         parent.spawn((
-            Name::new("Question Mark Text"),
-            Text2d::new("?"),
+            Name::new("Infinity Text"),
+            Text2d::new("∞"),
             TextColor(Color::WHITE),
             TextFont {
+                font: asset_server.load(SHAPE_BUTTON_FONT),
                 font_size: 32.0,
                 ..default()
             },
-            Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)), // Slightly in front
+            Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
         ));
     });
+}
+
+fn spawn_random_shape_button(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
+) {
+    let x_offset = 100.0;
+
+    let temp_position = Vec3::new(0.0, 0.0, 10.0);
+
+    let button_entity = commands
+        .spawn((
+            Name::new("Random Shape Button 3D"),
+            RandomShapeButton,
+            Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+            Transform::from_translation(temp_position),
+            MiniHourglass {
+                base_position: temp_position,
+                original_x: x_offset,
+            },
+        ))
+        .id();
+
+    commands.entity(button_entity).with_children(|parent| {
+        parent.spawn((
+            Name::new("Random Shape Text"),
+            Text2d::new("?"),
+            TextColor(Color::WHITE),
+            TextFont {
+                font: asset_server.load(SHAPE_BUTTON_FONT),
+                font_size: 32.0,
+                ..default()
+            },
+            Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+        ));
+    });
+}
+
+fn handle_random_shape_button_clicks(
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    random_shape_button_query: Query<&Transform, (With<RandomShapeButton>, With<MiniHourglass>)>,
+    mut config: ResMut<HourglassConfig>,
+) {
+    if mouse_input.just_pressed(MouseButton::Left) {
+        if let Ok(window) = windows.single() {
+            if let Some(cursor_position) = window.cursor_position() {
+                if let Ok((camera, camera_transform)) = camera_query.single() {
+                    if let Ok(world_position) =
+                        camera.viewport_to_world_2d(camera_transform, cursor_position)
+                    {
+                        if let Ok(transform) = random_shape_button_query.single() {
+                            let distance =
+                                world_position.distance(transform.translation.truncate());
+
+                            let click_radius = 20.0 * transform.scale.x;
+
+                            if distance < click_radius {
+                                let shapes = [
+                                    HourglassShape::Classic,
+                                    HourglassShape::Modern,
+                                    HourglassShape::Slim,
+                                    HourglassShape::Wide,
+                                ];
+                                let mut rng = rand::thread_rng();
+                                config.shape_type = shapes[rng.gen_range(0..shapes.len())];
+                                config.shape_mode = ShapeMode::Static;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn handle_morphing_button_clicks(
