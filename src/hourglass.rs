@@ -1,9 +1,9 @@
-use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode, TimerState};
+use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
-    HourglassMeshSandConfig, HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash,
-    SandSplashConfig,
+    HourglassMeshSand, HourglassMeshSandConfig, HourglassMeshSandState,
+    HourglassPlugin as BevyHourglassPlugin, NeckStyle, SandSplash, SandSplashConfig,
 };
 
 pub struct HourglassPlugin;
@@ -16,8 +16,8 @@ impl Plugin for HourglassPlugin {
                 Update,
                 (
                     update_hourglass_color,
-                    update_hourglass_shape,
-                    update_morphing_shape,
+                    update_hourglass_shape.after(update_hourglass_color),
+                    update_morphing_shape.after(update_hourglass_color),
                     update_hourglass_timer.after(update_morphing_shape),
                     handle_hourglass_click,
                     handle_timer_start,
@@ -271,19 +271,35 @@ fn spawn_hourglass(
 
 fn update_hourglass_color(
     config: Res<HourglassConfig>,
-    mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    main_children: Query<&Children, With<MainHourglass>>,
+    mut sand_state_query: Query<&mut HourglassMeshSandState, With<MainHourglass>>,
+    sand_material_query: Query<&MeshMaterial2d<ColorMaterial>, With<HourglassMeshSand>>,
     mut splash_query: Query<&mut SandSplash, With<MainHourglass>>,
 ) {
-    if config.is_changed() {
-        // Update sand color
-        for mut hourglass in hourglass_query.iter_mut() {
-            hourglass.sand_color = config.color;
-        }
+    if !config.is_changed() {
+        return;
+    }
 
-        // Update particle color for sand splash
-        for mut sand_splash in splash_query.iter_mut() {
-            sand_splash.config.particle_color = config.color;
+    // Keep sand_config in sync so future mesh regenerations use the new color.
+    for mut sand_state in sand_state_query.iter_mut() {
+        sand_state.sand_config.color = config.color;
+    }
+
+    // Mutate the shared ColorMaterial asset so the rendered sand changes immediately
+    // without despawning the hourglass (which would wipe in-flight SandSplash particles).
+    for children in main_children.iter() {
+        for child in children.iter() {
+            if let Ok(material_handle) = sand_material_query.get(child) {
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    material.color = config.color;
+                }
+            }
         }
+    }
+
+    for mut sand_splash in splash_query.iter_mut() {
+        sand_splash.config.particle_color = config.color;
     }
 }
 
@@ -293,119 +309,86 @@ fn update_hourglass_shape(
     mut materials: ResMut<Assets<ColorMaterial>>,
     config: Res<HourglassConfig>,
     timer_state: Res<TimerState>,
-    time: Res<Time>,
     query: Query<(Entity, &Hourglass, &DragState), With<MainHourglass>>,
     mut last_shape_type: Local<Option<HourglassShape>>,
     mut last_shape_mode: Local<Option<ShapeMode>>,
-    mut last_recreation_time: Local<f32>,
-    mut last_color_mode: Local<Option<ColorMode>>,
 ) {
-    // Only handle static shape mode
-    if config.shape_mode == ShapeMode::Static {
-        // Check if shape type or shape mode actually changed
-        let shape_changed = last_shape_type.is_none_or(|last| last != config.shape_type);
-        let mode_changed = last_shape_mode.is_none_or(|last| last != config.shape_mode);
-        let color_mode_changed = last_color_mode.is_none_or(|last| last != config.color_mode);
+    // Track shape_mode unconditionally so a Morphing -> Static transition is observable.
+    // (Tracking only inside the Static branch made last_shape_mode dead — it could never
+    // hold anything except Some(Static), so mode_changed was always false.)
+    let was_morphing = matches!(*last_shape_mode, Some(ShapeMode::Morphing));
 
-        // For shape/mode changes, recreate immediately
-        if shape_changed || mode_changed || color_mode_changed {
-            *last_shape_type = Some(config.shape_type);
-            *last_shape_mode = Some(config.shape_mode);
-            *last_color_mode = Some(config.color_mode);
-            *last_recreation_time = time.elapsed_secs();
-        }
-        // For color-only changes in rainbow mode, throttle recreation to allow particles but update colors
-        else if config.is_changed() && config.color_mode == ColorMode::Rainbow {
-            let current_time = time.elapsed_secs();
-            // Only recreate every 0.1 seconds (10 FPS) to balance color updates with particle visibility
-            if current_time - *last_recreation_time < 0.01 {
-                return; // Throttle recreation to prevent particle issues
-            }
-            *last_recreation_time = current_time;
-        }
-        // For static color changes, recreate to ensure color is applied properly
-        else if config.is_changed() && config.color_mode == ColorMode::Static {
-            // Always recreate for static color changes to ensure proper color update
-            *last_recreation_time = time.elapsed_secs();
-        }
-        // For other cases where nothing changed, return early
-        else if !shape_changed && !mode_changed && !config.is_changed() {
-            return;
-        }
-        // Preserve current hourglass state and drag state
-        let (
-            _current_upper,
-            _current_lower,
-            _current_running,
-            _current_remaining,
-            current_flipping,
-            current_drag_state,
-        ) = if let Ok((_, hourglass, drag_state)) = query.single() {
-            (
-                hourglass.upper_chamber,
-                hourglass.lower_chamber,
-                hourglass.running,
-                hourglass.remaining_time,
-                hourglass.flipping,
-                drag_state.clone(),
-            )
-        } else {
-            (
-                0.0,
-                1.0,
-                false,
-                timer_state.duration,
-                false,
-                DragState::new(),
-            )
-        };
-
-        // Don't interrupt the hourglass if it's currently flipping
-        if current_flipping {
-            return;
-        }
-
-        // Despawn the old hourglass
-        for (entity, _, _) in query.iter() {
-            commands.entity(entity).despawn();
-        }
-
-        // Calculate correct fill percentage based on timer state
-        // fill_percent 1.0 = top chamber full, 0.0 = bottom chamber full
-        let fill_percent = if timer_state.duration > 0.0 {
-            timer_state.remaining / timer_state.duration
-        } else {
-            1.0
-        };
-
-        // Spawn a new hourglass with the new shape and preserved state
-        let (body_config, plates_config) = get_main_shape_config(config.shape_type);
-
-        let entity = HourglassMeshBuilder::new(Transform::from_xyz(0.0, 0.0, 0.0))
-            .with_body(body_config)
-            .with_plates(plates_config)
-            .with_sand(HourglassMeshSandConfig {
-                color: config.color,
-                fill_percent,
-                wall_offset: 4.0,
-            })
-            .with_sand_splash(SandSplashConfig {
-                particle_color: config.color,
-                splash_radius: 20.0,
-                particle_size: 2.0,
-                ..Default::default()
-            })
-            .with_timing(timer_state.duration)
-            .build(&mut commands, &mut meshes, &mut materials);
-
-        commands.entity(entity).insert((
-            MainHourglass,
-            current_drag_state, // Use the preserved drag state
-            Name::new("Main Hourglass"),
-        ));
-
-        // Note: State will be restored by update_hourglass_timer system
+    if config.shape_mode != ShapeMode::Static {
+        *last_shape_mode = Some(config.shape_mode);
+        return;
     }
+
+    // First Update tick: spawn_hourglass already created an entity with this config,
+    // so just seed the locals and return — do not despawn/respawn the Startup entity
+    // (which would discard it and rebuild with a different initial fill_percent).
+    if last_shape_type.is_none() {
+        *last_shape_type = Some(config.shape_type);
+        *last_shape_mode = Some(config.shape_mode);
+        return;
+    }
+
+    let shape_changed = last_shape_type.is_some_and(|last| last != config.shape_type);
+    let mode_changed = was_morphing;
+
+    if !shape_changed && !mode_changed {
+        return;
+    }
+
+    let (current_flipping, current_drag_state) =
+        if let Ok((_, hourglass, drag_state)) = query.single() {
+            (hourglass.flipping, drag_state.clone())
+        } else {
+            (false, DragState::new())
+        };
+
+    // If a flip is in progress, defer recreation by leaving the locals at their previous
+    // values so the change is re-detected on the next tick after the flip completes.
+    if current_flipping {
+        return;
+    }
+
+    *last_shape_type = Some(config.shape_type);
+    *last_shape_mode = Some(config.shape_mode);
+
+    for (entity, _, _) in query.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    let fill_percent = if timer_state.duration > 0.0 {
+        timer_state.remaining / timer_state.duration
+    } else {
+        1.0
+    };
+
+    let (body_config, plates_config) = get_main_shape_config(config.shape_type);
+
+    let entity = HourglassMeshBuilder::new(Transform::from_xyz(0.0, 0.0, 0.0))
+        .with_body(body_config)
+        .with_plates(plates_config)
+        .with_sand(HourglassMeshSandConfig {
+            color: config.color,
+            fill_percent,
+            wall_offset: 4.0,
+        })
+        .with_sand_splash(SandSplashConfig {
+            particle_color: config.color,
+            splash_radius: 20.0,
+            particle_size: 2.0,
+            ..Default::default()
+        })
+        .with_timing(timer_state.duration)
+        .build(&mut commands, &mut meshes, &mut materials);
+
+    commands.entity(entity).insert((
+        MainHourglass,
+        current_drag_state,
+        Name::new("Main Hourglass"),
+    ));
 }
 
 fn update_hourglass_timer(
@@ -443,12 +426,13 @@ fn handle_hourglass_click(
                     if let Ok(world_position) =
                         camera.viewport_to_world_2d(camera_transform, cursor_position)
                     {
-                        // Check if interaction is within hourglass bounds (approximate 400x400 area)
-                        let hourglass_pos = hourglass_transform.translation.truncate();
-                        let distance = world_position.distance(hourglass_pos);
+                        // Use a rectangular bounding box matching the hourglass's visible
+                        // footprint (roughly 400 tall x 400 wide centered at origin). The
+                        // previous radius-400 circle reached up to the shape-row at y ~+300,
+                        // so clicks on the random/morphing buttons were also toggling the timer.
+                        let local = world_position - hourglass_transform.translation.truncate();
 
-                        if distance < 400.0 {
-                            // Larger area to cover most of the hourglass
+                        if local.x.abs() < 200.0 && local.y.abs() < 220.0 {
                             // Handle mouse down - start potential drag
                             if mouse_input.just_pressed(MouseButton::Left) {
                                 drag_state.start_position = cursor_position;

@@ -12,34 +12,44 @@ use crate::hourglass::get_mini_shape_config;
 // glyphs (e.g. ∞) without needing a sibling `assets/` directory at runtime.
 const SHAPE_BUTTON_FONT: &str = "embedded://hourglass_timer/ui/fonts/FiraSans-Regular.ttf";
 
+/// Shared font handle for the 3D shape-row buttons. Loaded once at startup so we
+/// don't kick off duplicate async loads from each spawn system.
+#[derive(Resource)]
+struct ShapeButtonFont(Handle<Font>);
+
 pub struct ShapePanelPlugin;
 
 impl Plugin for ShapePanelPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "fonts/FiraSans-Regular.ttf");
 
-        app.add_systems(
-            PostStartup,
-            (
-                spawn_shape_buttons,
-                spawn_random_shape_button,
-                spawn_morphing_button,
-            ),
-        )
-        .add_systems(
-            Update,
-            (
-                handle_shape_button_clicks,
-                handle_random_shape_button_clicks,
-                handle_morphing_button_clicks,
-                update_mini_hourglass_colors,
-                handle_hover_effects,
-                update_hourglass_layering,
-                update_hover_timers,
-                update_mini_hourglass_positions,
-            ),
-        );
+        app.add_systems(PreStartup, load_shape_button_font)
+            .add_systems(
+                PostStartup,
+                (
+                    spawn_shape_buttons,
+                    spawn_random_shape_button,
+                    spawn_morphing_button,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
+                    update_mini_hourglass_colors,
+                    handle_hover_effects,
+                    update_hourglass_layering,
+                    handle_shape_button_clicks.after(update_hourglass_layering),
+                    handle_random_shape_button_clicks.after(update_hourglass_layering),
+                    handle_morphing_button_clicks.after(update_hourglass_layering),
+                    update_hover_timers,
+                    update_mini_hourglass_positions,
+                ),
+            );
     }
+}
+
+fn load_shape_button_font(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.insert_resource(ShapeButtonFont(asset_server.load(SHAPE_BUTTON_FONT)));
 }
 
 fn handle_hover_effects(
@@ -331,21 +341,16 @@ fn spawn_shape_buttons(
     }
 }
 
-fn spawn_morphing_button(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    asset_server: Res<AssetServer>,
-) {
+fn spawn_morphing_button(mut commands: Commands, font: Res<ShapeButtonFont>) {
     let x_offset = 150.0;
-
     let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
     let button_entity = commands
         .spawn((
             Name::new("Morphing Button 3D"),
             MorphingButton,
-            Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
             Transform::from_translation(temp_position),
+            Visibility::default(),
             MiniHourglass {
                 base_position: temp_position,
                 original_x: x_offset,
@@ -359,7 +364,7 @@ fn spawn_morphing_button(
             Text2d::new("∞"),
             TextColor(Color::WHITE),
             TextFont {
-                font: asset_server.load(SHAPE_BUTTON_FONT),
+                font: font.0.clone(),
                 font_size: 32.0,
                 ..default()
             },
@@ -368,21 +373,16 @@ fn spawn_morphing_button(
     });
 }
 
-fn spawn_random_shape_button(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    asset_server: Res<AssetServer>,
-) {
+fn spawn_random_shape_button(mut commands: Commands, font: Res<ShapeButtonFont>) {
     let x_offset = 100.0;
-
     let temp_position = Vec3::new(0.0, 0.0, 10.0);
 
     let button_entity = commands
         .spawn((
             Name::new("Random Shape Button 3D"),
             RandomShapeButton,
-            Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
             Transform::from_translation(temp_position),
+            Visibility::default(),
             MiniHourglass {
                 base_position: temp_position,
                 original_x: x_offset,
@@ -396,7 +396,7 @@ fn spawn_random_shape_button(
             Text2d::new("?"),
             TextColor(Color::WHITE),
             TextFont {
-                font: asset_server.load(SHAPE_BUTTON_FONT),
+                font: font.0.clone(),
                 font_size: 32.0,
                 ..default()
             },
