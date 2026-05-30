@@ -22,3 +22,6 @@ target/
 
 # Personal, machine-local Claude Code instructions
 CLAUDE.local.md
+
+# Obsidian (user-specific, not project state)
+.obsidian/
