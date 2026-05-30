@@ -19,3 +19,6 @@ target/
 *.js
 *.ts
 *.wasm
+
+# Personal, machine-local Claude Code instructions
+CLAUDE.local.md
