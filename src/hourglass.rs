@@ -1081,4 +1081,59 @@ mod tests {
             );
         }
     }
+
+    // --- apply_pending_flip -----------------------------------------------
+    //
+    // These exercise the flip-on-change orchestration with a headless `App`.
+    // A `MainHourglass` is spawned via `Commands` in `Startup` so it becomes
+    // visible to `apply_pending_flip`'s `Added<MainHourglass>` filter only
+    // after the command buffer flushes — mirroring how the recreation systems
+    // respawn the entity one frame before the flip lands on it.
+
+    /// Build a one-tick app that spawns a default `MainHourglass` via commands
+    /// and runs `apply_pending_flip` once in `Update`.
+    fn flip_test_app(pending: bool) -> App {
+        let mut app = App::new();
+        app.init_resource::<PendingFlip>();
+        app.world_mut().resource_mut::<PendingFlip>().0 = pending;
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((MainHourglass, Hourglass::default()));
+        });
+        app.add_systems(Update, apply_pending_flip);
+        app.update();
+        app
+    }
+
+    fn single_main_hourglass(app: &mut App) -> Hourglass {
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Hourglass, With<MainHourglass>>();
+        query.single(app.world()).unwrap().clone()
+    }
+
+    #[test]
+    fn pending_flip_flips_the_recreated_hourglass() {
+        let mut app = flip_test_app(true);
+
+        let hourglass = single_main_hourglass(&mut app);
+        assert!(hourglass.flipping, "a pending flip should start the flip");
+        // Sand forced to the bottom so the crate's end-of-flip swap leaves the
+        // top full, matching the drag-flip path.
+        assert_eq!(hourglass.upper_chamber, 0.0);
+        assert_eq!(hourglass.lower_chamber, 1.0);
+        // The request is consumed exactly once.
+        assert!(!app.world().resource::<PendingFlip>().0);
+    }
+
+    #[test]
+    fn no_pending_flip_leaves_the_hourglass_untouched() {
+        let mut app = flip_test_app(false);
+
+        let hourglass = single_main_hourglass(&mut app);
+        assert!(
+            !hourglass.flipping,
+            "without a pending flip the hourglass must not flip on spawn"
+        );
+        assert!(!app.world().resource::<PendingFlip>().0);
+    }
 }
