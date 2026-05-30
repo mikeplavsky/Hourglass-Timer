@@ -1,4 +1,4 @@
-use crate::resources::{HourglassConfig, HourglassShape, ShapeMode};
+use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
 use crate::ui::ShapeRowMarker;
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
@@ -274,7 +274,7 @@ struct MorphingButton;
 struct RandomShapeButton;
 
 #[derive(Component)]
-struct MiniHourglass {
+pub struct MiniHourglass {
     base_position: Vec3, // Store the original position
     original_x: f32,     // Store the original X position for positioning
 }
@@ -411,6 +411,7 @@ fn handle_random_shape_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     random_shape_button_query: Query<&Transform, (With<RandomShapeButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
+    mut timer_state: ResMut<TimerState>,
 ) {
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
@@ -440,6 +441,9 @@ fn handle_random_shape_button_clicks(
                                 }
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
+                                // Selecting a shape starts the countdown over from full
+                                timer_state.reset();
+                                timer_state.is_running = true;
                             }
                         }
                     }
@@ -494,6 +498,7 @@ fn handle_shape_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mini_hourglass_query: Query<(&Transform, &ShapeButton), With<MiniHourglass>>,
     mut config: ResMut<HourglassConfig>,
+    mut timer_state: ResMut<TimerState>,
 ) {
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
@@ -514,6 +519,9 @@ fn handle_shape_button_clicks(
                             if distance < click_radius {
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
+                                // Selecting a shape starts the countdown over from full
+                                timer_state.reset();
+                                timer_state.is_running = true;
                                 break;
                             }
                         }

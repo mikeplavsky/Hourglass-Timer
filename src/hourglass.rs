@@ -1,4 +1,5 @@
 use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode, TimerState};
+use crate::ui::shape_panel::MiniHourglass;
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
@@ -432,6 +433,8 @@ fn handle_hourglass_click(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
     mut hourglass_query: Query<(&Transform, &mut DragState, &mut Hourglass), With<MainHourglass>>,
     mut timer_state: ResMut<TimerState>,
+    mini_button_query: Query<&Transform, (With<MiniHourglass>, Without<MainHourglass>)>,
+    ui_interaction_query: Query<&Interaction>,
 ) {
     if let Ok(window) = windows.single() {
         if let Some(cursor_position) = window.cursor_position() {
@@ -443,6 +446,24 @@ fn handle_hourglass_click(
                     if let Ok(world_position) =
                         camera.viewport_to_world_2d(camera_transform, cursor_position)
                     {
+                        // Don't treat clicks on controls as hourglass clicks, otherwise
+                        // selecting a shape/color would also toggle the timer's pause state.
+
+                        // Sprite buttons (shape/morphing/random) carry MiniHourglass.
+                        let over_mini_button = mini_button_query.iter().any(|transform| {
+                            let click_radius = 30.0 * transform.scale.x;
+                            world_position.distance(transform.translation.truncate()) < click_radius
+                        });
+
+                        // Bevy UI buttons (color row + timer panel) use Interaction.
+                        let over_ui_button = ui_interaction_query
+                            .iter()
+                            .any(|interaction| *interaction != Interaction::None);
+
+                        if over_mini_button || over_ui_button {
+                            return;
+                        }
+
                         // Check if interaction is within hourglass bounds (approximate 400x400 area)
                         let hourglass_pos = hourglass_transform.translation.truncate();
                         let distance = world_position.distance(hourglass_pos);
