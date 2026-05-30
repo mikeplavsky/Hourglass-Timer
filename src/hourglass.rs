@@ -1,4 +1,6 @@
-use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode, TimerState};
+use crate::resources::{
+    ColorMode, HourglassConfig, HourglassShape, PendingFlip, ShapeMode, TimerState,
+};
 use crate::ui::shape_panel::MiniHourglass;
 use bevy::prelude::*;
 use bevy_hourglass::{
@@ -12,10 +14,14 @@ pub struct HourglassPlugin;
 impl Plugin for HourglassPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(BevyHourglassPlugin)
+            .init_resource::<PendingFlip>()
             .add_systems(Startup, spawn_hourglass)
             .add_systems(
                 Update,
                 (
+                    apply_pending_flip
+                        .before(update_hourglass_shape)
+                        .before(update_morphing_shape),
                     update_hourglass_color,
                     update_hourglass_shape,
                     update_morphing_shape,
@@ -769,8 +775,34 @@ fn interpolate_neck_style(style1: &NeckStyle, style2: &NeckStyle, t: f32) -> Nec
     }
 }
 
+// Flip the newly (re)spawned main hourglass when a color/shape change requested
+// it. Shape/color changes despawn and respawn the hourglass entity, so the flip
+// must land on the fresh entity (matched by `Added<MainHourglass>` the frame after
+// the recreation command flushes), never the about-to-be-despawned old one.
+fn apply_pending_flip(
+    mut pending: ResMut<PendingFlip>,
+    mut query: Query<&mut Hourglass, (With<MainHourglass>, Added<MainHourglass>)>,
+) {
+    if !pending.0 {
+        return;
+    }
+    // Clear the flag only once we actually flip, so a request made while a previous
+    // flip was blocking recreation survives to the real respawn.
+    if let Ok(mut hourglass) = query.single_mut() {
+        if hourglass.can_flip() {
+            // Mirror the drag-flip (493-498): start with all sand in the bottom so
+            // the crate's end-of-flip chamber swap leaves the top full.
+            hourglass.upper_chamber = 0.0;
+            hourglass.lower_chamber = 1.0;
+            hourglass.flip();
+            pending.0 = false;
+        }
+    }
+}
+
 fn handle_timer_start(
     timer_state: Res<TimerState>,
+    pending: Res<PendingFlip>,
     mut hourglass_query: Query<&mut Hourglass, With<MainHourglass>>,
     mut last_running_state: Local<bool>,
     mut has_ever_started: Local<bool>,
@@ -779,9 +811,15 @@ fn handle_timer_start(
     if timer_state.is_running && !*last_running_state {
         // Only flip on the very first start (when timer hasn't been started before)
         if !*has_ever_started {
-            for mut hourglass in hourglass_query.iter_mut() {
-                if hourglass.can_flip() {
-                    hourglass.flip();
+            // Skip the first-start flip when a color/shape change already queued a
+            // flip: that flip is owned by `apply_pending_flip` on the recreated
+            // entity. Flipping the old entity here would set `flipping=true` and trip
+            // the recreation guard, dropping the shape/color change.
+            if !pending.0 {
+                for mut hourglass in hourglass_query.iter_mut() {
+                    if hourglass.can_flip() {
+                        hourglass.flip();
+                    }
                 }
             }
             *has_ever_started = true;

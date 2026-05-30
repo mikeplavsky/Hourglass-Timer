@@ -1,4 +1,4 @@
-use crate::resources::{HourglassConfig, HourglassShape, ShapeMode, TimerState};
+use crate::resources::{HourglassConfig, HourglassShape, PendingFlip, ShapeMode, TimerState};
 use crate::ui::ShapeRowMarker;
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
@@ -429,6 +429,7 @@ fn handle_random_shape_button_clicks(
     random_shape_button_query: Query<&Transform, (With<RandomShapeButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
     mut timer_state: ResMut<TimerState>,
+    mut pending_flip: ResMut<PendingFlip>,
 ) {
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
@@ -448,9 +449,10 @@ fn handle_random_shape_button_clicks(
                                 let new_shape = pick_distinct_shape(config.shape_type, &mut rng);
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
-                                // Selecting a shape starts the countdown over from full
+                                // Selecting a shape starts the countdown over and flips
                                 timer_state.reset();
                                 timer_state.is_running = true;
+                                pending_flip.0 = true;
                             }
                         }
                     }
@@ -506,6 +508,7 @@ fn handle_shape_button_clicks(
     mini_hourglass_query: Query<(&Transform, &ShapeButton), With<MiniHourglass>>,
     mut config: ResMut<HourglassConfig>,
     mut timer_state: ResMut<TimerState>,
+    mut pending_flip: ResMut<PendingFlip>,
 ) {
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
@@ -526,9 +529,10 @@ fn handle_shape_button_clicks(
                             if distance < click_radius {
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
-                                // Selecting a shape starts the countdown over from full
+                                // Selecting a shape starts the countdown over and flips
                                 timer_state.reset();
                                 timer_state.is_running = true;
+                                pending_flip.0 = true;
                                 break;
                             }
                         }

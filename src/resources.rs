@@ -83,6 +83,11 @@ impl TimerState {
     }
 }
 
+/// Set by color/shape UI handlers to request a flip animation on the next
+/// (re)spawned main hourglass. Consumed by `apply_pending_flip`.
+#[derive(Resource, Default)]
+pub struct PendingFlip(pub bool);
+
 // Color palette for the color selector
 pub const COLOR_PALETTE: &[Color] = &[
     Color::srgb(0.0, 0.0, 0.0), // Black
