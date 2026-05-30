@@ -405,6 +405,23 @@ fn spawn_random_shape_button(
     });
 }
 
+/// Pick a random hourglass shape different from `current`, re-rolling until it
+/// differs.
+fn pick_distinct_shape(current: HourglassShape, rng: &mut impl Rng) -> HourglassShape {
+    let shapes = [
+        HourglassShape::Classic,
+        HourglassShape::Modern,
+        HourglassShape::Slim,
+        HourglassShape::Wide,
+    ];
+    let mut new_shape = shapes[rng.gen_range(0..shapes.len())];
+    // Re-roll until we get a shape different from the current one
+    while new_shape == current {
+        new_shape = shapes[rng.gen_range(0..shapes.len())];
+    }
+    new_shape
+}
+
 fn handle_random_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -427,18 +444,8 @@ fn handle_random_shape_button_clicks(
                             let click_radius = 20.0 * transform.scale.x;
 
                             if distance < click_radius {
-                                let shapes = [
-                                    HourglassShape::Classic,
-                                    HourglassShape::Modern,
-                                    HourglassShape::Slim,
-                                    HourglassShape::Wide,
-                                ];
                                 let mut rng = rand::thread_rng();
-                                let mut new_shape = shapes[rng.gen_range(0..shapes.len())];
-                                // Re-roll until we get a shape different from the current one
-                                while new_shape == config.shape_type {
-                                    new_shape = shapes[rng.gen_range(0..shapes.len())];
-                                }
+                                let new_shape = pick_distinct_shape(config.shape_type, &mut rng);
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
                                 // Selecting a shape starts the countdown over from full
@@ -529,5 +536,48 @@ fn handle_shape_button_clicks(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    const ALL_SHAPES: [HourglassShape; 4] = [
+        HourglassShape::Classic,
+        HourglassShape::Modern,
+        HourglassShape::Slim,
+        HourglassShape::Wide,
+    ];
+
+    #[test]
+    fn pick_distinct_shape_always_differs_from_current() {
+        for current in ALL_SHAPES {
+            for seed in 0..20 {
+                let mut rng = StdRng::seed_from_u64(seed);
+                let new_shape = pick_distinct_shape(current, &mut rng);
+                assert_ne!(new_shape, current, "current {current:?}, seed {seed}");
+            }
+        }
+    }
+
+    #[test]
+    fn pick_distinct_shape_returns_valid_variant() {
+        for current in ALL_SHAPES {
+            let mut rng = StdRng::seed_from_u64(7);
+            let new_shape = pick_distinct_shape(current, &mut rng);
+            assert!(ALL_SHAPES.contains(&new_shape));
+        }
+    }
+
+    #[test]
+    fn pick_distinct_shape_is_deterministic_for_same_seed() {
+        let mut rng_a = StdRng::seed_from_u64(99);
+        let mut rng_b = StdRng::seed_from_u64(99);
+        let a = pick_distinct_shape(HourglassShape::Classic, &mut rng_a);
+        let b = pick_distinct_shape(HourglassShape::Classic, &mut rng_b);
+        assert_eq!(a, b);
     }
 }

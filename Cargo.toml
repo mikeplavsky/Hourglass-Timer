@@ -19,6 +19,10 @@ tracing = { version = "0.1", features = [
     "release_max_level_warn",
 ] }
 
+[dev-dependencies]
+# Approximate floating-point comparisons for unit tests.
+approx = "0.5"
+
 # Your web builds will start failing if you add a dependency that pulls in `getrandom` v0.3+.
 # To fix this, you should tell `getrandom` to use the `wasm_js` backend on Wasm.
 # See: <https://docs.rs/getrandom/0.3.3/getrandom/#webassembly-support>.

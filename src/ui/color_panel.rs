@@ -224,6 +224,25 @@ fn color_dist_sq(a: Srgba, b: Srgba) -> f32 {
     dr * dr + dg * dg + db * db
 }
 
+/// Pick a random sRGB color that is at least `min_dist_sq` (squared RGB
+/// distance) away from `current`, re-rolling until the constraint is met.
+fn pick_distinct_color(current: Srgba, min_dist_sq: f32, rng: &mut impl Rng) -> Srgba {
+    let mut new_color = Srgba::rgb(
+        rng.gen_range(0.0..1.0),
+        rng.gen_range(0.0..1.0),
+        rng.gen_range(0.0..1.0),
+    );
+    // Re-roll until the new color is far enough from the current one
+    while color_dist_sq(new_color, current) < min_dist_sq {
+        new_color = Srgba::rgb(
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+        );
+    }
+    new_color
+}
+
 fn handle_random_color_button(
     mut interaction_query: Query<
         (&Interaction, &mut BorderColor),
@@ -240,19 +259,7 @@ fn handle_random_color_button(
                 // different from the current one (max possible distance ~1.732).
                 const MIN_COLOR_DIST_SQ: f32 = 0.3 * 0.3;
                 let current = config.color.to_srgba();
-                let mut new_color = Srgba::rgb(
-                    rng.gen_range(0.0..1.0),
-                    rng.gen_range(0.0..1.0),
-                    rng.gen_range(0.0..1.0),
-                );
-                // Re-roll until the new color is far enough from the current one
-                while color_dist_sq(new_color, current) < MIN_COLOR_DIST_SQ {
-                    new_color = Srgba::rgb(
-                        rng.gen_range(0.0..1.0),
-                        rng.gen_range(0.0..1.0),
-                        rng.gen_range(0.0..1.0),
-                    );
-                }
+                let new_color = pick_distinct_color(current, MIN_COLOR_DIST_SQ, &mut rng);
                 config.color = new_color.into();
                 config.color_mode = ColorMode::Random;
                 // Changing the color starts the countdown over from full
@@ -301,11 +308,17 @@ fn handle_rainbow_color_button(
 fn update_rainbow_color(time: Res<Time>, mut config: ResMut<HourglassConfig>) {
     if config.color_mode == ColorMode::Rainbow {
         // Cycle through hue over time (0-360 degrees)
-        let hue = (time.elapsed_secs() * 60.0) % 360.0; // Complete cycle every 6 seconds
+        let hue = rainbow_hue(time.elapsed_secs());
 
         // Convert HSL to RGB (saturation = 1.0, lightness = 0.5 for vibrant colors)
         config.color = hsl_to_rgb(hue, 1.0, 0.5);
     }
+}
+
+/// Hue (in degrees, 0-360) for the rainbow animation at the given elapsed
+/// time. Completes one full cycle every 6 seconds.
+fn rainbow_hue(elapsed_secs: f32) -> f32 {
+    (elapsed_secs * 60.0) % 360.0
 }
 
 // Helper function to convert HSL to RGB
@@ -330,4 +343,130 @@ fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> Color {
     };
 
     Color::srgb(r + m, g + m, b + m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_abs_diff_eq;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    /// Extract (r, g, b) from a `Color` for comparison.
+    fn rgb(color: Color) -> (f32, f32, f32) {
+        let s = color.to_srgba();
+        (s.red, s.green, s.blue)
+    }
+
+    fn assert_rgb(actual: Color, expected: (f32, f32, f32)) {
+        let (r, g, b) = rgb(actual);
+        assert_abs_diff_eq!(r, expected.0, epsilon = 1e-5);
+        assert_abs_diff_eq!(g, expected.1, epsilon = 1e-5);
+        assert_abs_diff_eq!(b, expected.2, epsilon = 1e-5);
+    }
+
+    #[test]
+    fn color_dist_sq_identical_is_zero() {
+        let c = Srgba::rgb(0.5, 0.5, 0.5);
+        assert_abs_diff_eq!(color_dist_sq(c, c), 0.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn color_dist_sq_black_to_white_is_three() {
+        let black = Srgba::rgb(0.0, 0.0, 0.0);
+        let white = Srgba::rgb(1.0, 1.0, 1.0);
+        assert_abs_diff_eq!(color_dist_sq(black, white), 3.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn color_dist_sq_is_symmetric() {
+        let a = Srgba::rgb(0.1, 0.7, 0.3);
+        let b = Srgba::rgb(0.8, 0.2, 0.9);
+        assert_abs_diff_eq!(color_dist_sq(a, b), color_dist_sq(b, a), epsilon = 1e-6);
+    }
+
+    #[test]
+    fn color_dist_sq_matches_threshold() {
+        // Single channel differs by 0.3 -> squared distance 0.09, the exact
+        // threshold used by pick_distinct_color (0.3 * 0.3).
+        let a = Srgba::rgb(0.2, 0.4, 0.6);
+        let b = Srgba::rgb(0.5, 0.4, 0.6);
+        assert_abs_diff_eq!(color_dist_sq(a, b), 0.09, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn pick_distinct_color_respects_min_distance() {
+        let current = Srgba::rgb(0.5, 0.5, 0.5);
+        let min_dist_sq = 0.3 * 0.3;
+        for seed in 0..20 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let new_color = pick_distinct_color(current, min_dist_sq, &mut rng);
+            assert!(
+                color_dist_sq(new_color, current) >= min_dist_sq,
+                "seed {seed}: color too close to current"
+            );
+        }
+    }
+
+    #[test]
+    fn pick_distinct_color_channels_in_range() {
+        let current = Srgba::rgb(0.5, 0.5, 0.5);
+        for seed in 0..20 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let c = pick_distinct_color(current, 0.09, &mut rng);
+            for ch in [c.red, c.green, c.blue] {
+                assert!((0.0..1.0).contains(&ch), "seed {seed}: channel {ch} out of range");
+            }
+        }
+    }
+
+    #[test]
+    fn pick_distinct_color_zero_threshold_is_deterministic() {
+        // With min_dist_sq = 0 the constraint is trivially satisfied (the loop
+        // never runs), so the same seed always yields the same first roll.
+        let current = Srgba::rgb(0.5, 0.5, 0.5);
+        let mut rng_a = StdRng::seed_from_u64(123);
+        let mut rng_b = StdRng::seed_from_u64(123);
+        let a = pick_distinct_color(current, 0.0, &mut rng_a);
+        let b = pick_distinct_color(current, 0.0, &mut rng_b);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn rainbow_hue_cycles() {
+        assert_abs_diff_eq!(rainbow_hue(0.0), 0.0, epsilon = 1e-4);
+        assert_abs_diff_eq!(rainbow_hue(3.0), 180.0, epsilon = 1e-4);
+        // Full cycle wraps back to 0 after 6 seconds.
+        assert_abs_diff_eq!(rainbow_hue(6.0), 0.0, epsilon = 1e-4);
+        assert_abs_diff_eq!(rainbow_hue(7.5), 90.0, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn rainbow_hue_stays_in_range() {
+        for i in 0..200 {
+            let elapsed = i as f32 * 0.137;
+            let hue = rainbow_hue(elapsed);
+            assert!((0.0..360.0).contains(&hue), "hue {hue} out of range");
+        }
+    }
+
+    #[test]
+    fn hsl_to_rgb_primary_and_secondary_hues() {
+        assert_rgb(hsl_to_rgb(0.0, 1.0, 0.5), (1.0, 0.0, 0.0)); // red
+        assert_rgb(hsl_to_rgb(60.0, 1.0, 0.5), (1.0, 1.0, 0.0)); // yellow
+        assert_rgb(hsl_to_rgb(180.0, 1.0, 0.5), (0.0, 1.0, 1.0)); // cyan
+        assert_rgb(hsl_to_rgb(240.0, 1.0, 0.5), (0.0, 0.0, 1.0)); // blue
+        assert_rgb(hsl_to_rgb(300.0, 1.0, 0.5), (1.0, 0.0, 1.0)); // magenta
+    }
+
+    #[test]
+    fn hsl_to_rgb_zero_saturation_is_gray() {
+        assert_rgb(hsl_to_rgb(123.0, 0.0, 0.5), (0.5, 0.5, 0.5));
+    }
+
+    #[test]
+    fn hsl_to_rgb_lightness_extremes() {
+        assert_rgb(hsl_to_rgb(0.0, 1.0, 0.0), (0.0, 0.0, 0.0)); // black
+        assert_rgb(hsl_to_rgb(0.0, 1.0, 1.0), (1.0, 1.0, 1.0)); // white
+    }
 }

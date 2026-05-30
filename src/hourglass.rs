@@ -796,3 +796,251 @@ fn handle_timer_start(
 
     *last_running_state = timer_state.is_running;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_abs_diff_eq;
+
+    // --- lerp_f32 ---------------------------------------------------------
+
+    #[test]
+    fn lerp_endpoints_and_midpoint() {
+        assert_abs_diff_eq!(lerp_f32(0.0, 10.0, 0.0), 0.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(lerp_f32(0.0, 10.0, 1.0), 10.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(lerp_f32(0.0, 10.0, 0.5), 5.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(lerp_f32(10.0, 0.0, 0.25), 7.5, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn lerp_extrapolates_outside_unit_interval() {
+        // No clamping: t outside [0, 1] extrapolates.
+        assert_abs_diff_eq!(lerp_f32(0.0, 10.0, 2.0), 20.0, epsilon = 1e-6);
+    }
+
+    // --- interpolate_bulb_style -------------------------------------------
+
+    /// Destructure a `Circular` bulb or panic.
+    fn circular(style: &BulbStyle) -> (f32, f32, usize) {
+        match style {
+            BulbStyle::Circular {
+                curvature,
+                width_factor,
+                curve_resolution,
+            } => (*curvature, *width_factor, *curve_resolution),
+            other => panic!("expected Circular, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn interpolate_bulb_circular_midpoint() {
+        // Classic (1.0, 1.0, 20) <-> Slim (1.5, 0.7, 18) at t = 0.5.
+        let a = BulbStyle::Circular {
+            curvature: 1.0,
+            width_factor: 1.0,
+            curve_resolution: 20,
+        };
+        let b = BulbStyle::Circular {
+            curvature: 1.5,
+            width_factor: 0.7,
+            curve_resolution: 18,
+        };
+        let (curv, wf, res) = circular(&interpolate_bulb_style(&a, &b, 0.5));
+        assert_abs_diff_eq!(curv, 1.25, epsilon = 1e-6);
+        assert_abs_diff_eq!(wf, 0.85, epsilon = 1e-6);
+        // lerp(20, 18, 0.5) = 19.0 -> as usize -> 19, .max(5) -> 19.
+        assert_eq!(res, 19);
+    }
+
+    #[test]
+    fn interpolate_bulb_curve_resolution_floor() {
+        // Both low-resolution: lerp stays below 5, so the .max(5) floor applies.
+        let a = BulbStyle::Circular {
+            curvature: 1.0,
+            width_factor: 1.0,
+            curve_resolution: 2,
+        };
+        let b = BulbStyle::Circular {
+            curvature: 1.0,
+            width_factor: 1.0,
+            curve_resolution: 4,
+        };
+        let (_, _, res) = circular(&interpolate_bulb_style(&a, &b, 0.5));
+        assert_eq!(res, 5);
+    }
+
+    #[test]
+    fn interpolate_bulb_mixed_variants_switch_at_half() {
+        // Circular <-> Straight are different variants: clone style1 below 0.5,
+        // style2 at/above 0.5.
+        let circ = BulbStyle::Circular {
+            curvature: 1.0,
+            width_factor: 1.0,
+            curve_resolution: 20,
+        };
+        let straight = BulbStyle::Straight { width_factor: 0.5 };
+        assert!(matches!(
+            interpolate_bulb_style(&circ, &straight, 0.4),
+            BulbStyle::Circular { .. }
+        ));
+        assert!(matches!(
+            interpolate_bulb_style(&circ, &straight, 0.5),
+            BulbStyle::Straight { .. }
+        ));
+    }
+
+    // --- interpolate_neck_style -------------------------------------------
+
+    /// Destructure a `Curved` neck or panic.
+    fn curved(style: &NeckStyle) -> (f32, f32, f32, usize) {
+        match style {
+            NeckStyle::Curved {
+                curvature,
+                width,
+                height,
+                curve_resolution,
+            } => (*curvature, *width, *height, *curve_resolution),
+            other => panic!("expected Curved, got {other:?}"),
+        }
+    }
+
+    /// Destructure a `Straight` neck or panic.
+    fn straight(style: &NeckStyle) -> (f32, f32) {
+        match style {
+            NeckStyle::Straight { width, height } => (*width, *height),
+            other => panic!("expected Straight, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn interpolate_neck_curved_midpoint() {
+        // Classic (1.0, 14, 20, 10) <-> Slim (1.5, 12, 24, 8) at t = 0.5.
+        let a = NeckStyle::Curved {
+            curvature: 1.0,
+            width: 14.0,
+            height: 20.0,
+            curve_resolution: 10,
+        };
+        let b = NeckStyle::Curved {
+            curvature: 1.5,
+            width: 12.0,
+            height: 24.0,
+            curve_resolution: 8,
+        };
+        let (curv, w, h, res) = curved(&interpolate_neck_style(&a, &b, 0.5));
+        assert_abs_diff_eq!(curv, 1.25, epsilon = 1e-6);
+        assert_abs_diff_eq!(w, 13.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(h, 22.0, epsilon = 1e-6);
+        // lerp(10, 8, 0.5) = 9.0 -> 9, .max(3) -> 9.
+        assert_eq!(res, 9);
+    }
+
+    #[test]
+    fn interpolate_neck_straight_midpoint() {
+        let a = NeckStyle::Straight {
+            width: 12.0,
+            height: 32.0,
+        };
+        let b = NeckStyle::Straight {
+            width: 12.0,
+            height: 32.0,
+        };
+        let (w, h) = straight(&interpolate_neck_style(&a, &b, 0.5));
+        assert_abs_diff_eq!(w, 12.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(h, 32.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn interpolate_neck_straight_to_curved_curvature_ramps_from_zero() {
+        let s = NeckStyle::Straight {
+            width: 12.0,
+            height: 32.0,
+        };
+        let c = NeckStyle::Curved {
+            curvature: 1.5,
+            width: 12.0,
+            height: 24.0,
+            curve_resolution: 8,
+        };
+        // At t = 0 curvature starts at 0; resolution comes from the curved end.
+        let (curv0, _, _, res0) = curved(&interpolate_neck_style(&s, &c, 0.0));
+        assert_abs_diff_eq!(curv0, 0.0, epsilon = 1e-6);
+        assert_eq!(res0, 8);
+        // At t = 1 curvature reaches the target.
+        let (curv1, _, _, _) = curved(&interpolate_neck_style(&s, &c, 1.0));
+        assert_abs_diff_eq!(curv1, 1.5, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn interpolate_neck_curved_to_straight_curvature_ramps_to_zero() {
+        let c = NeckStyle::Curved {
+            curvature: 1.0,
+            width: 14.0,
+            height: 20.0,
+            curve_resolution: 10,
+        };
+        let s = NeckStyle::Straight {
+            width: 12.0,
+            height: 32.0,
+        };
+        // Result stays Curved, resolution from the curved (style1) end.
+        let (curv0, _, _, res0) = curved(&interpolate_neck_style(&c, &s, 0.0));
+        assert_abs_diff_eq!(curv0, 1.0, epsilon = 1e-6);
+        assert_eq!(res0, 10);
+        let (curv1, _, _, _) = curved(&interpolate_neck_style(&c, &s, 1.0));
+        assert_abs_diff_eq!(curv1, 0.0, epsilon = 1e-6);
+    }
+
+    // --- get_morphed_shape_config -----------------------------------------
+
+    #[test]
+    fn morph_anchor_t0_is_classic() {
+        let (body, plates) = get_morphed_shape_config(0.0);
+        let (classic_body, classic_plates) = get_main_shape_config(HourglassShape::Classic);
+        assert_abs_diff_eq!(body.total_height, classic_body.total_height, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.width, classic_plates.width, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.height, classic_plates.height, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn morph_anchor_t025_is_modern() {
+        let (body, plates) = get_morphed_shape_config(0.25);
+        let (modern_body, modern_plates) = get_main_shape_config(HourglassShape::Modern);
+        assert_abs_diff_eq!(body.total_height, modern_body.total_height, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.width, modern_plates.width, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.height, modern_plates.height, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn morph_halfway_classic_to_modern() {
+        // t = 0.125 -> segment 0.5 -> Classic<->Modern at local_t 0.5.
+        let (body, plates) = get_morphed_shape_config(0.125);
+        // Classic and Modern share total_height 400.0.
+        assert_abs_diff_eq!(body.total_height, 400.0, epsilon = 1e-4);
+        // Plates width: lerp(400, 380, 0.5) = 390; height: lerp(10, 12, 0.5) = 11.
+        assert_abs_diff_eq!(plates.width, 390.0, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.height, 11.0, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn morph_wraps_at_t1_back_to_classic() {
+        // t = 1.0 -> segment 4.0 -> floor % 4 == 0 -> Classic, local_t 0.
+        let (body, plates) = get_morphed_shape_config(1.0);
+        let (classic_body, classic_plates) = get_main_shape_config(HourglassShape::Classic);
+        assert_abs_diff_eq!(body.total_height, classic_body.total_height, epsilon = 1e-4);
+        assert_abs_diff_eq!(plates.width, classic_plates.width, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn morph_total_height_finite_and_positive_across_sweep() {
+        for i in 0..10 {
+            let t = i as f32 / 10.0;
+            let (body, _) = get_morphed_shape_config(t);
+            assert!(
+                body.total_height.is_finite() && body.total_height > 0.0,
+                "t = {t}: total_height = {}",
+                body.total_height
+            );
+        }
+    }
+}
