@@ -433,7 +433,12 @@ fn handle_random_shape_button_clicks(
                                     HourglassShape::Wide,
                                 ];
                                 let mut rng = rand::thread_rng();
-                                config.shape_type = shapes[rng.gen_range(0..shapes.len())];
+                                let mut new_shape = shapes[rng.gen_range(0..shapes.len())];
+                                // Re-roll until we get a shape different from the current one
+                                while new_shape == config.shape_type {
+                                    new_shape = shapes[rng.gen_range(0..shapes.len())];
+                                }
+                                config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
                             }
                         }

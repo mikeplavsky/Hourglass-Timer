@@ -211,6 +211,15 @@ fn handle_color_button_clicks(
     }
 }
 
+/// Squared Euclidean distance between two colors in sRGB space.
+/// Squared to avoid an unnecessary `sqrt` when only comparing against a threshold.
+fn color_dist_sq(a: Srgba, b: Srgba) -> f32 {
+    let dr = a.red - b.red;
+    let dg = a.green - b.green;
+    let db = a.blue - b.blue;
+    dr * dr + dg * dg + db * db
+}
+
 fn handle_random_color_button(
     mut interaction_query: Query<
         (&Interaction, &mut BorderColor),
@@ -222,11 +231,24 @@ fn handle_random_color_button(
         match *interaction {
             Interaction::Pressed => {
                 let mut rng = rand::thread_rng();
-                config.color = Color::srgb(
+                // Minimum squared RGB distance so the new color is noticeably
+                // different from the current one (max possible distance ~1.732).
+                const MIN_COLOR_DIST_SQ: f32 = 0.3 * 0.3;
+                let current = config.color.to_srgba();
+                let mut new_color = Srgba::rgb(
                     rng.gen_range(0.0..1.0),
                     rng.gen_range(0.0..1.0),
                     rng.gen_range(0.0..1.0),
                 );
+                // Re-roll until the new color is far enough from the current one
+                while color_dist_sq(new_color, current) < MIN_COLOR_DIST_SQ {
+                    new_color = Srgba::rgb(
+                        rng.gen_range(0.0..1.0),
+                        rng.gen_range(0.0..1.0),
+                        rng.gen_range(0.0..1.0),
+                    );
+                }
+                config.color = new_color.into();
                 config.color_mode = ColorMode::Random;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
