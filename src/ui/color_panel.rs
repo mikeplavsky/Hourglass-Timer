@@ -1,4 +1,4 @@
-use crate::resources::{COLOR_PALETTE, ColorMode, HourglassConfig};
+use crate::resources::{COLOR_PALETTE, ColorMode, HourglassConfig, TimerState};
 use crate::ui::ColorRowMarker;
 use bevy::prelude::*;
 use rand::Rng;
@@ -193,12 +193,16 @@ fn handle_color_button_clicks(
         (Changed<Interaction>, With<Button>),
     >,
     mut config: ResMut<HourglassConfig>,
+    mut timer_state: ResMut<TimerState>,
 ) {
     for (interaction, color_button, mut border_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 config.color = color_button.color;
                 config.color_mode = ColorMode::Static;
+                // Changing the color starts the countdown over from full
+                timer_state.reset();
+                timer_state.is_running = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {
@@ -226,6 +230,7 @@ fn handle_random_color_button(
         (Changed<Interaction>, With<RandomColorButton>),
     >,
     mut config: ResMut<HourglassConfig>,
+    mut timer_state: ResMut<TimerState>,
 ) {
     for (interaction, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -250,6 +255,9 @@ fn handle_random_color_button(
                 }
                 config.color = new_color.into();
                 config.color_mode = ColorMode::Random;
+                // Changing the color starts the countdown over from full
+                timer_state.reset();
+                timer_state.is_running = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {
@@ -268,11 +276,16 @@ fn handle_rainbow_color_button(
         (Changed<Interaction>, With<RainbowColorButton>),
     >,
     mut config: ResMut<HourglassConfig>,
+    mut timer_state: ResMut<TimerState>,
 ) {
     for (interaction, mut border_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 config.color_mode = ColorMode::Rainbow;
+                // Activating rainbow starts the countdown over from full (the
+                // continuous cycling in update_rainbow_color does not restart it)
+                timer_state.reset();
+                timer_state.is_running = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {
