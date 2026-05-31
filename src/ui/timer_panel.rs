@@ -460,3 +460,205 @@ fn update_time_display(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Headless `App` tests for the timer-panel button/display systems. Each
+    // spawns its UI entity in `Startup` (so it is flushed before `Update` runs
+    // on the same tick) and presses a button by spawning `Interaction::Pressed`
+    // explicitly — `Button`'s required `Interaction` defaults to `None`, which
+    // would otherwise route every handler through its no-op arm. `Changed<_>`
+    // and `Res::is_changed()` both fire on the first tick for freshly inserted
+    // components/resources, so a single `app.update()` is enough.
+
+    /// Build a headless app with the given `TimerState` and one pressed button
+    /// carrying the marker bundle `B`. The caller adds the system under test and
+    /// calls `app.update()`.
+    fn pressed_button_app<B: Bundle>(timer_state: TimerState, marker: B) -> App {
+        let mut app = App::new();
+        app.insert_resource(timer_state);
+        app.world_mut().spawn((marker, Button, Interaction::Pressed));
+        app
+    }
+
+    // --- handle_timer_buttons ---------------------------------------------
+
+    #[test]
+    fn time_adjust_button_press_adds_time() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: 60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons);
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 240.0);
+        assert_eq!(ts.remaining, 240.0);
+    }
+
+    #[test]
+    fn time_adjust_button_negative_subtracts_time() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: -60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons);
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 120.0);
+        assert_eq!(ts.remaining, 120.0);
+    }
+
+    // --- handle_control_buttons (one app per button: outcomes conflict) ---
+
+    #[test]
+    fn start_button_sets_running() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            StartButton,
+        );
+        app.add_systems(Update, handle_control_buttons);
+        app.update();
+        assert!(app.world().resource::<TimerState>().is_running);
+    }
+
+    #[test]
+    fn pause_button_clears_running() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 90.0,
+                is_running: true,
+            },
+            PauseButton,
+        );
+        app.add_systems(Update, handle_control_buttons);
+        app.update();
+        assert!(!app.world().resource::<TimerState>().is_running);
+    }
+
+    #[test]
+    fn reset_button_restores_and_stops() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 5.0,
+                is_running: true,
+            },
+            ResetButton,
+        );
+        app.add_systems(Update, handle_control_buttons);
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.remaining, 180.0);
+        assert!(!ts.is_running);
+    }
+
+    // --- handle_toggle_button ---------------------------------------------
+
+    /// Press the toggle button once against a `TimerPanelVisible(initial)`.
+    fn toggle_app(initial: bool) -> App {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(initial));
+        app.world_mut()
+            .spawn((ToggleButton, Button, Interaction::Pressed));
+        app.add_systems(Update, handle_toggle_button);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn toggle_button_flips_visibility_on() {
+        let app = toggle_app(false);
+        assert!(app.world().resource::<TimerPanelVisible>().0);
+    }
+
+    #[test]
+    fn toggle_button_flips_visibility_off() {
+        let app = toggle_app(true);
+        assert!(!app.world().resource::<TimerPanelVisible>().0);
+    }
+
+    // --- update_timer_panel_visibility ------------------------------------
+
+    /// Spawn a hidden `TimerControlsContainer`, set panel visibility, run the
+    /// visibility system once, and return the resulting `display`. The resource
+    /// reads as changed on the first tick, so the guarded body runs.
+    fn container_display(visible: bool) -> Display {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(visible));
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((
+                TimerControlsContainer,
+                Node {
+                    display: Display::None,
+                    ..default()
+                },
+            ));
+        });
+        app.add_systems(Update, update_timer_panel_visibility);
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Node, With<TimerControlsContainer>>();
+        query.single(app.world()).unwrap().display
+    }
+
+    #[test]
+    fn visible_panel_shows_container() {
+        assert_eq!(container_display(true), Display::Flex);
+    }
+
+    #[test]
+    fn hidden_panel_collapses_container() {
+        assert_eq!(container_display(false), Display::None);
+    }
+
+    // --- update_time_display ----------------------------------------------
+
+    /// Spawn a `TimeDisplay` text, run the display system once, and return its
+    /// text. Starts as `"xx"` so the not-visible case is detectable.
+    fn time_display_text(visible: bool, remaining: f32) -> String {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(visible));
+        app.insert_resource(TimerState {
+            duration: 180.0,
+            remaining,
+            is_running: false,
+        });
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((TimeDisplay, Text::new("xx")));
+        });
+        app.add_systems(Update, update_time_display);
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Text, With<TimeDisplay>>();
+        query.single(app.world()).unwrap().0.clone()
+    }
+
+    #[test]
+    fn time_display_updates_when_panel_visible() {
+        // 65s -> 00:01:05.
+        assert_eq!(time_display_text(true, 65.0), "00:01:05");
+    }
+
+    #[test]
+    fn time_display_untouched_when_panel_hidden() {
+        assert_eq!(time_display_text(false, 65.0), "xx");
+    }
+}

@@ -53,6 +53,26 @@ impl DragState {
     }
 }
 
+/// Whether a world-space point lands inside a button's circular hit area of
+/// radius `base_radius * scale_x` centered on `center`. Buttons scale up when
+/// hovered, so the radius tracks the current X scale. Boundary is exclusive
+/// (a point exactly `base_radius * scale_x` away is a miss).
+pub(crate) fn within_click_radius(
+    world_pos: Vec2,
+    center: Vec2,
+    base_radius: f32,
+    scale_x: f32,
+) -> bool {
+    world_pos.distance(center) < base_radius * scale_x
+}
+
+/// Whether the pointer has moved far enough from where the press began to count
+/// as a drag rather than a click. Boundary is exclusive (a move of exactly
+/// `threshold` is still treated as a click).
+pub(crate) fn exceeds_drag_threshold(start: Vec2, current: Vec2, threshold: f32) -> bool {
+    current.distance(start) > threshold
+}
+
 // Helper function to create main hourglass configurations for different shapes
 fn get_main_shape_config(
     shape: HourglassShape,
@@ -457,8 +477,12 @@ fn handle_hourglass_click(
 
                         // Sprite buttons (shape/morphing/random) carry MiniHourglass.
                         let over_mini_button = mini_button_query.iter().any(|transform| {
-                            let click_radius = 30.0 * transform.scale.x;
-                            world_position.distance(transform.translation.truncate()) < click_radius
+                            within_click_radius(
+                                world_position,
+                                transform.translation.truncate(),
+                                30.0,
+                                transform.scale.x,
+                            )
                         });
 
                         // Bevy UI buttons (color row + timer panel) use Interaction.
@@ -483,12 +507,15 @@ fn handle_hourglass_click(
                             }
 
                             // Handle mouse movement during press - detect drag
-                            if mouse_input.pressed(MouseButton::Left) && !drag_state.is_dragging {
-                                let drag_distance =
-                                    cursor_position.distance(drag_state.start_position);
-                                if drag_distance > drag_state.drag_threshold {
-                                    drag_state.is_dragging = true;
-                                }
+                            if mouse_input.pressed(MouseButton::Left)
+                                && !drag_state.is_dragging
+                                && exceeds_drag_threshold(
+                                    drag_state.start_position,
+                                    cursor_position,
+                                    drag_state.drag_threshold,
+                                )
+                            {
+                                drag_state.is_dragging = true;
                             }
 
                             // Handle mouse up - complete action
@@ -1082,6 +1109,67 @@ mod tests {
         }
     }
 
+    // --- within_click_radius ----------------------------------------------
+
+    #[test]
+    fn within_click_radius_boundary_is_exclusive() {
+        let center = Vec2::ZERO;
+        // Dead center and just inside are hits.
+        assert!(within_click_radius(center, center, 30.0, 1.0));
+        assert!(within_click_radius(Vec2::new(29.0, 0.0), center, 30.0, 1.0));
+        // Exactly on the boundary is a miss (strict `<`), as is beyond it.
+        assert!(!within_click_radius(Vec2::new(30.0, 0.0), center, 30.0, 1.0));
+        assert!(!within_click_radius(Vec2::new(31.0, 0.0), center, 30.0, 1.0));
+    }
+
+    #[test]
+    fn within_click_radius_scale_grows_and_shrinks_hit_area() {
+        let center = Vec2::ZERO;
+        let point = Vec2::new(35.0, 0.0);
+        // At base radius 30 the point is outside, but a hovered button (scale
+        // 1.3 -> effective radius 39) pulls it inside.
+        assert!(!within_click_radius(point, center, 30.0, 1.0));
+        assert!(within_click_radius(point, center, 30.0, 1.3));
+        // A shrunk button (scale 0.5 -> radius 15) excludes a point the base
+        // radius would have included.
+        let near = Vec2::new(20.0, 0.0);
+        assert!(within_click_radius(near, center, 30.0, 1.0));
+        assert!(!within_click_radius(near, center, 30.0, 0.5));
+    }
+
+    #[test]
+    fn within_click_radius_handles_offset_center_and_smaller_radius() {
+        let center = Vec2::new(100.0, 50.0);
+        // 10px away with the 20px button radius -> hit.
+        assert!(within_click_radius(Vec2::new(100.0, 60.0), center, 20.0, 1.0));
+        // Exactly 20px away -> miss.
+        assert!(!within_click_radius(
+            Vec2::new(120.0, 50.0),
+            center,
+            20.0,
+            1.0
+        ));
+    }
+
+    // --- exceeds_drag_threshold -------------------------------------------
+
+    #[test]
+    fn exceeds_drag_threshold_boundary_is_exclusive() {
+        let start = Vec2::new(5.0, 5.0);
+        // Below the threshold stays a click.
+        assert!(!exceeds_drag_threshold(start, Vec2::new(11.0, 5.0), 10.0));
+        // Exactly at the threshold is still a click (strict `>`).
+        assert!(!exceeds_drag_threshold(start, Vec2::new(15.0, 5.0), 10.0));
+        // Beyond the threshold becomes a drag.
+        assert!(exceeds_drag_threshold(start, Vec2::new(16.0, 5.0), 10.0));
+    }
+
+    #[test]
+    fn exceeds_drag_threshold_zero_movement_is_click() {
+        let p = Vec2::new(42.0, 7.0);
+        assert!(!exceeds_drag_threshold(p, p, 10.0));
+    }
+
     // --- apply_pending_flip -----------------------------------------------
     //
     // These exercise the flip-on-change orchestration with a headless `App`.
@@ -1135,5 +1223,152 @@ mod tests {
             "without a pending flip the hourglass must not flip on spawn"
         );
         assert!(!app.world().resource::<PendingFlip>().0);
+    }
+
+    // --- handle_timer_start -----------------------------------------------
+    //
+    // The `MainHourglass` is spawned in `Startup` so it is present before
+    // `handle_timer_start` runs in `Update` on the same tick. Both `Local`s
+    // start `false`, so a running timer reads as "just transitioned to running"
+    // — the first-start condition.
+
+    /// One-tick app: a default `MainHourglass`, the given `TimerState`, and a
+    /// `PendingFlip`, with `handle_timer_start` in `Update`.
+    fn timer_start_app(timer_state: TimerState, pending: bool) -> App {
+        let mut app = App::new();
+        app.insert_resource(timer_state);
+        app.init_resource::<PendingFlip>();
+        app.world_mut().resource_mut::<PendingFlip>().0 = pending;
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((MainHourglass, Hourglass::default()));
+        });
+        app.add_systems(Update, handle_timer_start);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn first_start_flips_when_no_pending() {
+        let mut app = timer_start_app(
+            TimerState {
+                duration: 100.0,
+                remaining: 50.0,
+                is_running: true,
+            },
+            false,
+        );
+        let hourglass = single_main_hourglass(&mut app);
+        assert!(
+            hourglass.flipping,
+            "the very first start should flip the hourglass"
+        );
+    }
+
+    #[test]
+    fn first_start_skips_flip_when_pending() {
+        // A queued color/shape flip owns the animation on the recreated entity,
+        // so handle_timer_start must not flip the current one.
+        let mut app = timer_start_app(
+            TimerState {
+                duration: 100.0,
+                remaining: 50.0,
+                is_running: true,
+            },
+            true,
+        );
+        let hourglass = single_main_hourglass(&mut app);
+        assert!(
+            !hourglass.flipping,
+            "a pending flip must suppress the first-start flip"
+        );
+    }
+
+    #[test]
+    fn at_rest_timer_does_not_flip() {
+        // remaining == duration && !running drives the has_ever_started reset
+        // branch; nothing should flip.
+        let mut app = timer_start_app(
+            TimerState {
+                duration: 100.0,
+                remaining: 100.0,
+                is_running: false,
+            },
+            false,
+        );
+        let hourglass = single_main_hourglass(&mut app);
+        assert!(!hourglass.flipping, "an at-rest timer must not flip");
+    }
+
+    // --- update_hourglass_timer -------------------------------------------
+
+    /// One-tick app: a default `MainHourglass` and the given `TimerState`, with
+    /// `update_hourglass_timer` in `Update`.
+    fn timer_sync_app(timer_state: TimerState) -> App {
+        let mut app = App::new();
+        app.insert_resource(timer_state);
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((MainHourglass, Hourglass::default()));
+        });
+        app.add_systems(Update, update_hourglass_timer);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn update_hourglass_timer_syncs_state_and_chambers() {
+        let mut app = timer_sync_app(TimerState {
+            duration: 100.0,
+            remaining: 25.0,
+            is_running: true,
+        });
+        let hourglass = single_main_hourglass(&mut app);
+        assert_abs_diff_eq!(hourglass.total_time, 100.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(hourglass.remaining_time, 25.0, epsilon = 1e-6);
+        assert!(hourglass.running);
+        // Chambers track progress: 25% remaining on top, 75% elapsed below.
+        assert_abs_diff_eq!(hourglass.upper_chamber, 0.25, epsilon = 1e-6);
+        assert_abs_diff_eq!(hourglass.lower_chamber, 0.75, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn update_hourglass_timer_zero_duration_leaves_chambers_default() {
+        // With duration 0 the chamber branch is skipped, so the defaults survive
+        // (a default Hourglass starts full on top).
+        let mut app = timer_sync_app(TimerState {
+            duration: 0.0,
+            remaining: 0.0,
+            is_running: false,
+        });
+        let default_hg = Hourglass::default();
+        let hourglass = single_main_hourglass(&mut app);
+        assert_abs_diff_eq!(
+            hourglass.upper_chamber,
+            default_hg.upper_chamber,
+            epsilon = 1e-6
+        );
+        assert_abs_diff_eq!(
+            hourglass.lower_chamber,
+            default_hg.lower_chamber,
+            epsilon = 1e-6
+        );
+        assert!(!hourglass.running);
+    }
+
+    // --- update_hourglass_color -------------------------------------------
+
+    #[test]
+    fn update_hourglass_color_applies_config_color() {
+        let mut app = App::new();
+        app.init_resource::<HourglassConfig>();
+        let new_color = Color::srgb(0.1, 0.2, 0.3);
+        app.world_mut().resource_mut::<HourglassConfig>().color = new_color;
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((MainHourglass, Hourglass::default()));
+        });
+        app.add_systems(Update, update_hourglass_color);
+        app.update();
+
+        let hourglass = single_main_hourglass(&mut app);
+        assert_eq!(hourglass.sand_color, new_color);
     }
 }

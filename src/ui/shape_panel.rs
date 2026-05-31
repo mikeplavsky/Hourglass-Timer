@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
 use rand::Rng;
 
-use crate::hourglass::get_mini_shape_config;
+use crate::hourglass::{get_mini_shape_config, within_click_radius};
 
 // Bevy's default font is an ASCII-only FiraMono subset. We embed Fira Sans
 // Regular into the binary so the shape-row buttons can render non-ASCII
@@ -122,6 +122,19 @@ fn handle_hover_effects(
     }
 }
 
+/// Scale factor for a shape-row button. Hover takes precedence over selection:
+/// hovered buttons grow to 1.3, an unhovered-but-selected button sits at 1.15,
+/// and everything else stays at 1.0.
+fn shape_button_scale(is_hovered: bool, is_selected: bool) -> f32 {
+    if is_hovered {
+        1.3
+    } else if is_selected {
+        1.15
+    } else {
+        1.0
+    }
+}
+
 fn update_hourglass_layering(
     config: Res<HourglassConfig>,
     mut mini_hourglass_query: Query<(
@@ -148,16 +161,7 @@ fn update_hourglass_layering(
         let base_position = mini_hourglass.base_position;
 
         // Visual effects with scaling only
-        let scale = if let Some(_hover_component) = hovered {
-            // Hovered state: larger scale
-            1.3
-        } else if config.shape_type == shape_button.shape {
-            // Selected state: slightly larger
-            1.15
-        } else {
-            // Default state
-            1.0
-        };
+        let scale = shape_button_scale(hovered.is_some(), config.shape_type == shape_button.shape);
 
         // Apply scale
         transform.scale = Vec3::splat(scale);
@@ -171,16 +175,7 @@ fn update_hourglass_layering(
         let base_position = mini_hourglass.base_position;
 
         // Visual effects with scaling only
-        let scale = if let Some(_hover_component) = hovered {
-            // Hovered state: larger scale
-            1.3
-        } else if config.shape_mode == ShapeMode::Morphing {
-            // Selected state: slightly larger when morphing is active
-            1.15
-        } else {
-            // Default state
-            1.0
-        };
+        let scale = shape_button_scale(hovered.is_some(), config.shape_mode == ShapeMode::Morphing);
 
         // Apply scale
         transform.scale = Vec3::splat(scale);
@@ -193,7 +188,8 @@ fn update_hourglass_layering(
     if let Ok((mut transform, mini_hourglass, hovered)) = random_shape_button_query.single_mut() {
         let base_position = mini_hourglass.base_position;
 
-        let scale = if hovered.is_some() { 1.3 } else { 1.0 };
+        // Random button has no persistent selected state — only hover scales it.
+        let scale = shape_button_scale(hovered.is_some(), false);
 
         transform.scale = Vec3::splat(scale);
         transform.translation = base_position;
@@ -439,12 +435,12 @@ fn handle_random_shape_button_clicks(
                         camera.viewport_to_world_2d(camera_transform, cursor_position)
                     {
                         if let Ok(transform) = random_shape_button_query.single() {
-                            let distance =
-                                world_position.distance(transform.translation.truncate());
-
-                            let click_radius = 20.0 * transform.scale.x;
-
-                            if distance < click_radius {
+                            if within_click_radius(
+                                world_position,
+                                transform.translation.truncate(),
+                                20.0,
+                                transform.scale.x,
+                            ) {
                                 let mut rng = rand::thread_rng();
                                 let new_shape = pick_distinct_shape(config.shape_type, &mut rng);
                                 config.shape_type = new_shape;
@@ -479,13 +475,12 @@ fn handle_morphing_button_clicks(
                     {
                         // Check if click is near the morphing button
                         if let Ok(transform) = morphing_button_query.single() {
-                            let distance =
-                                world_position.distance(transform.translation.truncate());
-
-                            // Adjust click detection radius based on current scale
-                            let click_radius = 20.0 * transform.scale.x;
-
-                            if distance < click_radius {
+                            if within_click_radius(
+                                world_position,
+                                transform.translation.truncate(),
+                                20.0,
+                                transform.scale.x,
+                            ) {
                                 // Toggle morphing mode
                                 if config.shape_mode == ShapeMode::Static {
                                     config.shape_mode = ShapeMode::Morphing;
@@ -520,13 +515,12 @@ fn handle_shape_button_clicks(
                     {
                         // Check if click is near any mini hourglass
                         for (transform, shape_button) in mini_hourglass_query.iter() {
-                            let distance =
-                                world_position.distance(transform.translation.truncate());
-
-                            // Adjust click detection radius based on current scale
-                            let click_radius = 30.0 * transform.scale.x;
-
-                            if distance < click_radius {
+                            if within_click_radius(
+                                world_position,
+                                transform.translation.truncate(),
+                                30.0,
+                                transform.scale.x,
+                            ) {
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
                                 // Selecting a shape starts the countdown over and flips
@@ -583,5 +577,24 @@ mod tests {
         let a = pick_distinct_shape(HourglassShape::Classic, &mut rng_a);
         let b = pick_distinct_shape(HourglassShape::Classic, &mut rng_b);
         assert_eq!(a, b);
+    }
+
+    // --- shape_button_scale -----------------------------------------------
+
+    #[test]
+    fn shape_button_scale_hover_beats_selection() {
+        // Hover wins even when also selected.
+        assert_eq!(shape_button_scale(true, true), 1.3);
+        assert_eq!(shape_button_scale(true, false), 1.3);
+    }
+
+    #[test]
+    fn shape_button_scale_selected_only() {
+        assert_eq!(shape_button_scale(false, true), 1.15);
+    }
+
+    #[test]
+    fn shape_button_scale_default() {
+        assert_eq!(shape_button_scale(false, false), 1.0);
     }
 }
