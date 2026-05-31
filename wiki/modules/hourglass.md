@@ -93,7 +93,7 @@ The interpolation helpers are pure and tested:
 
 ## Tests
 
-Inline tests cover the pure interpolation logic thoroughly: `lerp_f32` endpoints/extrapolation, `interpolate_bulb_style` (midpoint, resolution floor, variant switch), `interpolate_neck_style` (curved, straight, both mixed directions), and `get_morphed_shape_config` anchors/midpoints/wrap. The ECS systems (`spawn_hourglass`, the rebuild systems, input handling) have **no automated tests** — they're covered manually per [[TESTING.md|TESTING.md]]. See [[references/test-coverage#hourglass.rs]].
+27 tests — the most of any module. Pure logic: `lerp_f32` endpoints/extrapolation, `interpolate_bulb_style` (midpoint, resolution floor, variant switch), `interpolate_neck_style` (curved, straight, both mixed directions), `get_morphed_shape_config` anchors/midpoints/wrap, and the extracted hit-test geometry `within_click_radius` / `exceeds_drag_threshold` (exclusive boundaries, scale, offset center). Headless-`App` system tests: `apply_pending_flip`, `handle_timer_start` (first-start flip, pending-flip suppression, at-rest no-op), `update_hourglass_timer` (state sync + chamber math + zero-duration guard), and `update_hourglass_color`. Still manual-only (camera/window-gated): `spawn_hourglass`, the rebuild systems, and the world-space click dispatch in `handle_hourglass_click` — see [[TESTING.md|TESTING.md]] and [[references/test-coverage#hourglass.rs]].
 
 ## Open Questions
 

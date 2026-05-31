@@ -16,9 +16,15 @@ Used by: every feature.
 
 ## Pure helpers extracted from systems
 
-**What**: Arithmetic-heavy logic is pulled out of Bevy systems into free functions that take plain values and return plain values — so they run in a unit test without a Bevy `App`, window, or `World`.
-**Where**: `tick_countdown` ([[src/timer.rs|timer.rs]]); `lerp_f32`/`interpolate_bulb_style`/`interpolate_neck_style`/`get_morphed_shape_config` ([[src/hourglass.rs|hourglass.rs]]); `pick_distinct_color`/`color_dist_sq`/`rainbow_hue`/`hsl_to_rgb` ([[src/ui/color_panel.rs|color_panel.rs]]); `pick_distinct_shape` ([[src/ui/shape_panel.rs|shape_panel.rs]]); `add_time`/`format_time`/`reset` ([[src/resources.rs|resources.rs]]).
-**Why**: Testability. This single discipline is why 43 tests exist for an app whose rendering is otherwise hard to test. The flip side — anything left *inside* a system is untested. See [[references/test-coverage]].
+**What**: Arithmetic-heavy logic is pulled out of Bevy systems into free functions that take plain values and return plain values — so they run in a unit test without a Bevy `App`, window, or `World`. This is the *only* way to test logic gated behind `viewport_to_world_2d`, which returns `Err` in a headless `App` (no camera projection), making the surrounding system body unreachable.
+**Where**: `tick_countdown` ([[src/timer.rs|timer.rs]]); `lerp_f32`/`interpolate_bulb_style`/`interpolate_neck_style`/`get_morphed_shape_config`/`within_click_radius`/`exceeds_drag_threshold` ([[src/hourglass.rs|hourglass.rs]]); `pick_distinct_color`/`color_dist_sq`/`rainbow_hue`/`hsl_to_rgb` ([[src/ui/color_panel.rs|color_panel.rs]]); `pick_distinct_shape`/`shape_button_scale` ([[src/ui/shape_panel.rs|shape_panel.rs]]); `pause_overlay_should_show` ([[src/ui/pause_overlay.rs|pause_overlay.rs]]); `add_time`/`format_time`/`reset` ([[src/resources.rs|resources.rs]]).
+**Why**: Testability. Together with headless-`App` system tests (below), this discipline is why 77 tests exist for an app whose rendering is otherwise hard to test. The flip side — logic left *inside* a camera/window-gated system stays untested. See [[references/test-coverage]].
+
+## Headless `App` system tests
+
+**What**: Resource-driven systems are tested without any plugins: `App::new()`, `init`/`insert_resource`, spawn the entity under test in `Startup` (so its command buffer flushes before `Update` on the same tick), run one `app.update()`, then assert on the world. No window, render, or asset plugins.
+**Where**: `apply_pending_flip`, `handle_timer_start`, `update_hourglass_timer`, `update_hourglass_color` ([[src/hourglass.rs|hourglass.rs]]); the timer-panel button/visibility/display systems ([[src/ui/timer_panel.rs|timer_panel.rs]]); `update_pause_overlay_visibility` ([[src/ui/pause_overlay.rs|pause_overlay.rs]]).
+**Why**: Change-detection filters (`Added<T>`, `Changed<Interaction>`, `Res::is_changed()`) all fire on the first tick for freshly inserted components/resources, so a single update exercises the real system. Gotcha: spawn `Button` (it pulls in `Node`→`BackgroundColor`+`Interaction`) and override `Interaction::Pressed` explicitly — the default `None` would route handlers through their no-op arm and pass vacuously. Systems calling `viewport_to_world_2d` can't be tested this way (see above). See [[references/test-coverage]].
 
 Used by: [[features/countdown-timer]], [[features/shape-morphing]], [[features/color-selection]], [[features/shape-selection]].
 

@@ -1,5 +1,12 @@
 # Wiki Changelog
 
+## 2026-05-31
+
+- Test suite grew from 43 → **77** tests (new headless-`App` system tests + 4 extracted pure helpers: `within_click_radius`, `exceeds_drag_threshold`, `pause_overlay_should_show`, `shape_button_scale`). Line coverage 28% → 44%.
+- Rewrote `references/test-coverage.md` (thesis, per-file counts, feature matrix, gaps, pinned-behavior list) and added the coverage command.
+- Added a "Headless `App` system tests" pattern to `patterns.md` and refreshed the pure-helpers list.
+- Corrected the `## Tests` sections in `modules/hourglass`, `modules/timer-panel`, `modules/shape-panel`, `modules/pause-overlay` (no longer "no unit tests").
+
 ## 2026-05-30
 
 - Initial wiki generation (full bootstrap) at commit `1a17fc4`.

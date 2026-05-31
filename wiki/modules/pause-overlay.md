@@ -52,7 +52,7 @@ Bevy runtime. Read-only consumer of `TimerState`.
 
 ## Tests
 
-No unit tests. The three-way visibility condition is pure-ish but lives inside the system; it isn't extracted into a testable helper (a potential improvement). See [[references/test-coverage#pause_overlay.rs]].
+7 tests. The three-way visibility condition is extracted into the pure helper `pause_overlay_should_show(is_running, remaining, duration)`, unit-tested across paused/running/finished/not-started/sliver cases. Two headless-`App` tests then drive `update_pause_overlay_visibility` itself, asserting the node flips to `Display::Flex` when paused mid-run and stays `None` while running. See [[references/test-coverage#pause_overlay.rs]].
 
 ## Open Questions
 

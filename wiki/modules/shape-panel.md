@@ -61,7 +61,7 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 
 ## Tests
 
-Only `pick_distinct_shape` is unit-tested (always differs from current, returns a valid variant, deterministic per seed). The 11 systems — spawning, positioning, hover, click — are untested automated-wise. See [[references/test-coverage#shape_panel.rs]].
+6 unit tests. `pick_distinct_shape` (always differs from current, returns a valid variant, deterministic per seed) and `shape_button_scale` (hover beats selection → 1.3, selected → 1.15, else 1.0). The hover/click *systems* call `viewport_to_world_2d`, which can't run in a headless `App`, so their hit-test geometry is extracted into `within_click_radius` (tested over in [[modules/hourglass]]) rather than exercised through the system; spawning/positioning remain manual-only. See [[references/test-coverage#shape_panel.rs]].
 
 ## Related Pages
 

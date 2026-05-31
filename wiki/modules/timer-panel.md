@@ -54,7 +54,7 @@ Bevy runtime. Shares `TimerState` with [[modules/timer]], [[modules/hourglass]],
 
 ## Tests
 
-No unit tests in this module — it's UI wiring over `TimerState`, whose `add_time`/`reset`/`format_time` logic *is* tested in [[modules/resources]]. See [[references/test-coverage#timer_panel.rs]].
+11 headless-`App` tests. Each spawns a single pressed button (`Interaction::Pressed` set explicitly, since `Button`'s required `Interaction` defaults to `None`) or a display/container node, runs one `app.update()`, and asserts on the resulting `TimerState` / `TimerPanelVisible` / `Node`. Covered: time-adjust add & subtract, the Start/Pause/Reset control buttons (one app each, since their outcomes conflict), the toggle button both directions, panel show/hide, and the time display updating only when the panel is visible. The underlying `add_time`/`reset`/`format_time` arithmetic is also tested in [[modules/resources]]. See [[references/test-coverage#timer_panel.rs]].
 
 ## Related Pages
 
