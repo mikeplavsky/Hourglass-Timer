@@ -1,59 +1,65 @@
 use crate::resources::TimerState;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow; // Not in the prelude.
+use bevy::window::{PrimaryWindow, WindowMode}; // Not in the prelude (MonitorSelection is).
 
 pub struct WindowEffectsPlugin;
 
 impl Plugin for WindowEffectsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<WindowMaximized>()
-            .add_systems(Update, maximize_on_completion);
+        app.init_resource::<WindowFullscreen>()
+            .add_systems(Update, fullscreen_on_completion);
     }
 }
 
-/// Tracks whether we drove the OS window into a maximized state when the
-/// countdown finished. Serves as both the one-shot guard (maximize only once
-/// per completion) and the restore memory (only un-maximize a window that we
-/// maximized). Reflects what we *requested*, not the live OS state, so a user
-/// un-maximizing via the window button won't be re-maximized. Newtype resource
+/// The fullscreen mode we switch to on completion: borderless windowed
+/// fullscreen on the window's current monitor. Instant and reversible, with no
+/// display-mode/resolution change (unlike exclusive `WindowMode::Fullscreen`).
+const FULLSCREEN: WindowMode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
+
+/// Tracks whether we drove the OS window into fullscreen when the countdown
+/// finished. Serves as both the one-shot guard (enter fullscreen only once per
+/// completion) and the restore memory (only return to windowed a window that we
+/// sent fullscreen). Reflects what we *requested*, not the live OS state, so a
+/// user toggling fullscreen themselves won't be overridden. Newtype resource
 /// mirroring `PendingFlip` / `TimerPanelVisible`.
 #[derive(Resource, Default)]
-pub struct WindowMaximized(pub bool);
+pub struct WindowFullscreen(pub bool);
 
-/// Whether to maximize: the countdown has just stopped at zero and we have not
-/// already maximized. A user *pause* leaves `remaining > 0`, so it never trips
-/// this; only a natural finish (`remaining <= 0`) does. `duration > 0.0`
+/// Whether to go fullscreen: the countdown has just stopped at zero and we are
+/// not already fullscreen. A user *pause* leaves `remaining > 0`, so it never
+/// trips this; only a natural finish (`remaining <= 0`) does. `duration > 0.0`
 /// excludes a degenerate 0/0 timer sitting at rest.
-fn should_maximize(is_running: bool, remaining: f32, duration: f32, already: bool) -> bool {
+fn should_enter_fullscreen(is_running: bool, remaining: f32, duration: f32, already: bool) -> bool {
     !already && !is_running && remaining <= 0.0 && duration > 0.0
 }
 
-/// Whether to restore: a new countdown has put time back on the clock while we
-/// are still in our maximized state. Intentionally independent of `is_running`
-/// so that adding time after a finish also restores the window.
-fn should_restore(already: bool, remaining: f32) -> bool {
+/// Whether to return to windowed: a new countdown has put time back on the
+/// clock while we are still fullscreen. Intentionally independent of
+/// `is_running` so that adding time after a finish also restores the window.
+fn should_exit_fullscreen(already: bool, remaining: f32) -> bool {
     already && remaining > 0.0
 }
 
-/// Maximizes the primary window when the countdown reaches zero and restores it
-/// once a new countdown starts. A no-op when there is no single primary window.
-fn maximize_on_completion(
+/// Sends the primary window fullscreen when the countdown reaches zero and
+/// returns it to windowed once a new countdown starts. A no-op when there is no
+/// single primary window.
+fn fullscreen_on_completion(
     timer_state: Res<TimerState>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    mut maximized: ResMut<WindowMaximized>,
+    mut fullscreen: ResMut<WindowFullscreen>,
 ) {
     if let Ok(mut window) = windows.single_mut() {
-        if should_maximize(
+        if should_enter_fullscreen(
             timer_state.is_running,
             timer_state.remaining,
             timer_state.duration,
-            maximized.0,
+            fullscreen.0,
         ) {
-            window.set_maximized(true);
-            maximized.0 = true;
-        } else if should_restore(maximized.0, timer_state.remaining) {
-            window.set_maximized(false);
-            maximized.0 = false;
+            window.mode = FULLSCREEN;
+            fullscreen.0 = true;
+        } else if should_exit_fullscreen(fullscreen.0, timer_state.remaining) {
+            window.mode = WindowMode::Windowed;
+            fullscreen.0 = false;
         }
     }
 }
@@ -62,111 +68,104 @@ fn maximize_on_completion(
 mod tests {
     use super::*;
 
-    // --- should_maximize --------------------------------------------------
+    // --- should_enter_fullscreen ------------------------------------------
 
     #[test]
-    fn maximizes_on_natural_completion() {
-        // Countdown stopped at exactly zero, not yet maximized: the core case.
-        assert!(should_maximize(false, 0.0, 180.0, false));
+    fn enters_on_natural_completion() {
+        // Countdown stopped at exactly zero, not yet fullscreen: the core case.
+        assert!(should_enter_fullscreen(false, 0.0, 180.0, false));
     }
 
     #[test]
-    fn no_maximize_while_running() {
-        assert!(!should_maximize(true, 0.0, 180.0, false));
+    fn no_enter_while_running() {
+        assert!(!should_enter_fullscreen(true, 0.0, 180.0, false));
     }
 
     #[test]
-    fn no_maximize_at_rest_before_start() {
-        // remaining == duration: never started, nothing to maximize for.
-        assert!(!should_maximize(false, 180.0, 180.0, false));
+    fn no_enter_at_rest_before_start() {
+        // remaining == duration: never started, nothing to go fullscreen for.
+        assert!(!should_enter_fullscreen(false, 180.0, 180.0, false));
     }
 
     #[test]
-    fn no_maximize_when_already_latched() {
+    fn no_enter_when_already_fullscreen() {
         // The one-shot guard: don't re-fire while we're still finished.
-        assert!(!should_maximize(false, 0.0, 180.0, true));
+        assert!(!should_enter_fullscreen(false, 0.0, 180.0, true));
     }
 
     #[test]
-    fn no_maximize_on_user_pause() {
-        // A pause leaves time on the clock (remaining > 0) — must not maximize.
-        assert!(!should_maximize(false, 50.0, 100.0, false));
+    fn no_enter_on_user_pause() {
+        // A pause leaves time on the clock (remaining > 0) — must not go fullscreen.
+        assert!(!should_enter_fullscreen(false, 50.0, 100.0, false));
     }
 
     #[test]
-    fn no_maximize_for_zero_duration_timer() {
+    fn no_enter_for_zero_duration_timer() {
         // Degenerate 0/0 timer at rest: the duration guard suppresses it.
-        assert!(!should_maximize(false, 0.0, 0.0, false));
+        assert!(!should_enter_fullscreen(false, 0.0, 0.0, false));
     }
 
     #[test]
-    fn maximizes_with_tiny_overshoot_clamped_to_zero() {
+    fn enters_with_tiny_overshoot_clamped_to_zero() {
         // tick_countdown clamps remaining to exactly 0.0 on completion.
-        assert!(should_maximize(false, 0.0, 0.01, false));
+        assert!(should_enter_fullscreen(false, 0.0, 0.01, false));
     }
 
-    // --- should_restore ---------------------------------------------------
+    // --- should_exit_fullscreen -------------------------------------------
 
     #[test]
-    fn restores_after_restart() {
-        assert!(should_restore(true, 180.0));
-    }
-
-    #[test]
-    fn no_restore_when_not_latched() {
-        // We never maximized, so there's nothing to restore.
-        assert!(!should_restore(false, 180.0));
+    fn exits_after_restart() {
+        assert!(should_exit_fullscreen(true, 180.0));
     }
 
     #[test]
-    fn no_restore_while_still_at_zero() {
-        assert!(!should_restore(true, 0.0));
+    fn no_exit_when_not_fullscreen() {
+        // We never went fullscreen, so there's nothing to restore.
+        assert!(!should_exit_fullscreen(false, 180.0));
     }
 
     #[test]
-    fn restores_with_a_sliver_of_time() {
-        assert!(should_restore(true, 0.01));
+    fn no_exit_while_still_at_zero() {
+        assert!(!should_exit_fullscreen(true, 0.0));
     }
 
-    // --- maximize_on_completion (headless wiring) -------------------------
+    #[test]
+    fn exits_with_a_sliver_of_time() {
+        assert!(should_exit_fullscreen(true, 0.01));
+    }
+
+    // --- fullscreen_on_completion (headless wiring) -----------------------
 
     /// App with a `Window` + `PrimaryWindow` spawned in `Startup`, the given
-    /// `TimerState`, and `maximize_on_completion` in `Update`. The window is
+    /// `TimerState`, and `fullscreen_on_completion` in `Update`. The window is
     /// spawned (not just inserted) so it persists across multiple ticks. One
     /// `update()` runs Startup + a first Update tick.
     ///
-    /// No `WinitPlugin` is present (bare `App::new()`), so nothing consumes the
-    /// maximize request between the system writing it and a test reading it.
+    /// No `WinitPlugin` is present (bare `App::new()`), so nothing resets
+    /// `window.mode` between the system writing it and a test reading it.
     fn effects_app(timer_state: TimerState) -> App {
         let mut app = App::new();
         app.insert_resource(timer_state);
-        app.init_resource::<WindowMaximized>();
+        app.init_resource::<WindowFullscreen>();
         app.add_systems(Startup, |mut commands: Commands| {
             commands.spawn((Window::default(), PrimaryWindow));
         });
-        app.add_systems(Update, maximize_on_completion);
+        app.add_systems(Update, fullscreen_on_completion);
         app.update();
         app
     }
 
-    /// Consumes and returns the pending maximize request on the primary window.
-    /// `take_maximize_request` empties the slot, so a follow-up call sees `None`
-    /// unless the system wrote again.
-    fn take_request(app: &mut App) -> Option<bool> {
+    /// The primary window's current display mode (`Copy`, read non-destructively).
+    fn current_mode(app: &mut App) -> WindowMode {
         let mut query = app
             .world_mut()
-            .query_filtered::<&mut Window, With<PrimaryWindow>>();
-        let world = app.world_mut();
-        query
-            .single_mut(world)
-            .unwrap()
-            .internal
-            .take_maximize_request()
+            .query_filtered::<&Window, With<PrimaryWindow>>();
+        query.single(app.world()).unwrap().mode
     }
 
-    /// The non-destructive view of our latch (unlike `take_request`).
+    /// Our latch: whether we believe the window is in our fullscreen state.
     fn is_latched(app: &App) -> bool {
-        app.world().resource::<WindowMaximized>().0
+        app.world().resource::<WindowFullscreen>().0
     }
 
     fn set_timer(app: &mut App, remaining: f32, is_running: bool) {
@@ -176,108 +175,108 @@ mod tests {
     }
 
     #[test]
-    fn completion_requests_maximize() {
+    fn completion_enters_fullscreen() {
         let mut app = effects_app(TimerState {
             duration: 180.0,
             remaining: 0.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), Some(true));
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
         assert!(is_latched(&app));
     }
 
     #[test]
-    fn at_rest_does_not_request_maximize() {
-        // Headline safety: a freshly started app must not maximize on its own.
+    fn at_rest_stays_windowed() {
+        // Headline safety: a freshly started app must not go fullscreen on its own.
         let mut app = effects_app(TimerState {
             duration: 180.0,
             remaining: 180.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
     }
 
     #[test]
-    fn running_does_not_request_maximize() {
+    fn running_stays_windowed() {
         let mut app = effects_app(TimerState {
             duration: 100.0,
             remaining: 50.0,
             is_running: true,
         });
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
     }
 
     #[test]
-    fn pause_does_not_request_maximize() {
+    fn pause_stays_windowed() {
         // Paused mid-run (remaining > 0) — distinct from a finish.
         let mut app = effects_app(TimerState {
             duration: 100.0,
             remaining: 50.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
     }
 
     #[test]
-    fn maximize_fires_exactly_once() {
+    fn stays_fullscreen_while_finished() {
         let mut app = effects_app(TimerState {
             duration: 180.0,
             remaining: 0.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), Some(true));
-        // Still finished on the next tick: the latch suppresses a second request.
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
+        // Still finished on the next tick: the latch holds, no thrash back/forth.
         app.update();
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
         assert!(is_latched(&app));
     }
 
     #[test]
-    fn restart_requests_restore_then_settles() {
+    fn restart_returns_to_windowed_then_settles() {
         // Full lifecycle in one app: finish -> idle at zero -> restart.
         let mut app = effects_app(TimerState {
             duration: 180.0,
             remaining: 0.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), Some(true));
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
         assert!(is_latched(&app));
 
-        // Sit at zero for a couple of frames: no further requests, still latched.
+        // Sit at zero for a frame: still fullscreen, still latched.
         app.update();
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
         assert!(is_latched(&app));
 
         // Restart the countdown (mirrors reset()/drag-flip putting time back).
         set_timer(&mut app, 180.0, true);
         app.update();
-        assert_eq!(take_request(&mut app), Some(false));
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
 
-        // Running on: no thrash.
+        // Running on: stays windowed, no thrash.
         set_timer(&mut app, 175.0, true);
         app.update();
-        assert_eq!(take_request(&mut app), None);
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
     }
 
     #[test]
-    fn add_time_after_finish_restores() {
+    fn add_time_after_finish_returns_to_windowed() {
         // Adding time past a finish leaves is_running false but remaining > 0;
-        // should_restore ignores is_running, so the window still restores.
+        // should_exit_fullscreen ignores is_running, so the window still restores.
         let mut app = effects_app(TimerState {
             duration: 180.0,
             remaining: 0.0,
             is_running: false,
         });
-        assert_eq!(take_request(&mut app), Some(true));
+        assert_eq!(current_mode(&mut app), FULLSCREEN);
 
         set_timer(&mut app, 60.0, false);
         app.update();
-        assert_eq!(take_request(&mut app), Some(false));
+        assert_eq!(current_mode(&mut app), WindowMode::Windowed);
         assert!(!is_latched(&app));
     }
 }
