@@ -5,6 +5,7 @@ mod hourglass;
 pub mod resources;
 mod timer;
 mod ui;
+mod window_effects;
 
 use bevy::prelude::*;
 use resources::{HourglassConfig, TimerState};
@@ -35,7 +36,12 @@ impl Plugin for AppPlugin {
             .init_resource::<TimerState>();
 
         // Add our custom plugins
-        app.add_plugins((hourglass::HourglassPlugin, timer::TimerPlugin, ui::UIPlugin));
+        app.add_plugins((
+            hourglass::HourglassPlugin,
+            timer::TimerPlugin,
+            ui::UIPlugin,
+            window_effects::WindowEffectsPlugin,
+        ));
 
         // Spawn the main camera.
         app.add_systems(Startup, spawn_camera);
