@@ -11,7 +11,7 @@ Lets the user choose the hourglass silhouette from four presets — **Classic**,
 1. User sees four mini-hourglasses in the shape row, each a real (static) preview of a shape.
 2. User clicks one → the main hourglass rebuilds in that shape; the selected mini scales up slightly (1.15×).
 3. Or clicks the **`?`** button → a random *different* shape is chosen.
-4. Either way, the countdown **restarts from full and starts running**.
+4. Either way, the countdown **restarts from full, starts running, and the hourglass flips**.
 
 ## Implementation
 
@@ -30,7 +30,7 @@ Defined in `get_main_shape_config` (see the table in [[modules/hourglass#Shape p
 
 ## Selecting a shape
 
-`handle_shape_button_clicks` hit-tests the cursor against each mini (distance < `30 * scale`) and, on a hit, sets `config.shape_type`, forces `ShapeMode::Static`, and restarts the timer. `handle_random_shape_button_clicks` does the same with `pick_distinct_shape`, which re-rolls until it differs from the current shape. The actual visual swap happens in [[modules/hourglass#update_hourglass_shape|`update_hourglass_shape`]], which detects the changed `shape_type` and rebuilds the entity. See [[flows/appearance-recreation]].
+`handle_shape_button_clicks` hit-tests the cursor against each mini (`within_click_radius`, radius `30 * scale`) and, on a hit, sets `config.shape_type`, forces `ShapeMode::Static`, restarts the timer, and sets `PendingFlip`. `handle_random_shape_button_clicks` does the same with `pick_distinct_shape`, which re-rolls until it differs from the current shape. The actual visual swap happens in [[modules/hourglass#update_hourglass_shape|`update_hourglass_shape`]], which detects the changed `shape_type` and rebuilds the entity; the queued flip then lands on that rebuilt entity via `apply_pending_flip`. See [[flows/appearance-recreation]] and [[modules/hourglass#Flip-on-change orchestration]].
 
 ## Visual feedback
 

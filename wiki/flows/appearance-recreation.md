@@ -13,6 +13,7 @@ Supports: [[features/color-selection]], [[features/shape-selection]], [[features
 - `update_hourglass_color` — in-place color (sand + particles).
 - `update_hourglass_shape` — rebuild on shape/mode/static-color change (Static shape mode).
 - `update_morphing_shape` — rebuild each tick (Morphing mode).
+- `apply_pending_flip` — flips the rebuilt entity when a color/shape change requested it (ordered *before* the two rebuild systems).
 
 All in [[src/hourglass.rs|hourglass.rs]] (`Update`).
 
@@ -60,12 +61,40 @@ Then, before rebuilding: read the old entity's `flipping` + `DragState`; **if fl
 
 `update_hourglass_color` updates `sand_color` and particle color **in place** every change — cheap, but it does *not* refresh the sand body mesh. The static-color rebuild in `update_hourglass_shape` exists precisely to fix that gap (documented in [[TESTING.md|TESTING.md]]: "only sand particles would change color but the main sand body would remain the old color"). So a static color change triggers both: the in-place update *and* a rebuild.
 
+## Flipping the rebuilt hourglass
+
+A color or shape change doesn't only rebuild the hourglass — it also **flips** it, so the sand resets to the top to match the restarted countdown. The flip can't be issued at the click site: the rebuild despawns the current entity, and a flip applied to that doomed entity (a) is lost when it's despawned and (b) sets its `flipping` flag, which the rebuild guard reads as "don't interrupt a flip" — silently dropping the whole color/shape change. So the flip is deferred onto the *new* entity via a one-shot resource, [[modules/resources#PendingFlip|`PendingFlip`]].
+
+```mermaid
+sequenceDiagram
+    participant UI as Color/Shape handler
+    participant PF as PendingFlip
+    participant UHS as update_hourglass_shape
+    participant APF as apply_pending_flip
+    participant HG as Hourglass entity
+
+    UI->>PF: set true (+ timer reset/start)
+    Note over UHS,HG: frame N
+    UHS->>HG: despawn old, spawn new (command buffered)
+    Note over APF,HG: frame N+1 (command flushed)
+    APF->>HG: Added<MainHourglass> matches the new entity
+    APF->>HG: upper=0, lower=1, flip()
+    APF->>PF: clear (only after flip fires)
+```
+
+Three moving parts make this safe:
+
+- **`apply_pending_flip`** queries `Query<&mut Hourglass, (With<MainHourglass>, Added<MainHourglass>)>` — `Added` only matches the entity the frame *after* its spawn command flushes, so the flip lands on the rebuilt hourglass, never the old one. It mirrors the drag-flip: set `upper_chamber = 0.0` / `lower_chamber = 1.0` before `flip()` so the crate's end-of-flip chamber swap leaves the top full.
+- **Clear-on-fire** — `PendingFlip` is reset to `false` only once the flip actually fires (gated by `can_flip()`), so a request made while a previous flip was still blocking the rebuild survives to the real respawn.
+- **First-start suppression** — `handle_timer_start` skips its own first-start flip whenever `PendingFlip` is set, because the color/shape change also starts the timer; without this it would flip the old entity and trip the rebuild guard. See [[modules/hourglass#Flip-on-change orchestration]].
+
 ## Important Files
 
 | File | Role in Flow |
 |------|-------------|
-| [[src/hourglass.rs\|hourglass.rs]] | The three update systems + `HourglassMeshBuilder` calls. |
-| [[src/ui/color_panel.rs\|color_panel.rs]], [[src/ui/shape_panel.rs\|shape_panel.rs]] | Write the config that triggers recreation. |
+| [[src/hourglass.rs\|hourglass.rs]] | The three update systems + `apply_pending_flip` + `HourglassMeshBuilder` calls. |
+| [[src/resources.rs\|resources.rs]] | `PendingFlip` — the deferred-flip signal. |
+| [[src/ui/color_panel.rs\|color_panel.rs]], [[src/ui/shape_panel.rs\|shape_panel.rs]] | Write the config + set `PendingFlip` to trigger recreation and flip. |
 
 ## Data and State
 

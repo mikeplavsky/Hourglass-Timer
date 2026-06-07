@@ -1,4 +1,4 @@
-<!-- wiki:sources: src/hourglass.rs, src/timer.rs, src/ui/color_panel.rs, src/ui/shape_panel.rs, src/ui/timer_panel.rs, src/ui/pause_overlay.rs, build_wasm.sh -->
+<!-- wiki:sources: src/hourglass.rs, src/timer.rs, src/resources.rs, src/ui/color_panel.rs, src/ui/shape_panel.rs, src/ui/timer_panel.rs, src/ui/pause_overlay.rs, build_wasm.sh -->
 
 # Features
 
@@ -6,7 +6,7 @@ The Hourglass Timer is a single-screen visual countdown. At its core is a [[feat
 
 Around that core sits a layer of **appearance customization**: pick a sand [[features/color-selection|color]] (a fixed swatch, a random color, or a continuously-cycling rainbow), pick one of four hourglass [[features/shape-selection|shapes]] (or a random one), or enable [[features/shape-morphing|morphing]] so the shape smoothly cycles through all four over time. A [[features/hourglass-interaction#Pause overlay|pause overlay]] reads "PAUSED" when a running timer is paused mid-countdown. Finally, the whole app ships to the web as a [[features/web-build|WASM build]].
 
-A cross-cutting behavior worth calling out: **changing the color or shape restarts the countdown** from full and starts it running. This is intentional (see commits and [[features/color-selection#Side effect: restarts the timer]]), and it's why the appearance systems all hold a `ResMut<TimerState>`.
+A cross-cutting behavior worth calling out: **changing the color or shape restarts the countdown** from full, starts it running, **and flips the hourglass**. This is intentional (see commits and [[features/color-selection#Side effects: restarts the timer and flips]]), and it's why the appearance systems all hold a `ResMut<TimerState>` and set `PendingFlip`. The flip is deferred onto the rebuilt entity rather than applied inline — see [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
 
 ## Feature Inventory
 

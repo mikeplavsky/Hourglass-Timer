@@ -52,7 +52,7 @@ sequenceDiagram
    - **Click** → toggle `timer_state.is_running`.
 7. **Cleanup** — clear `is_dragging` and `start_position`.
 
-Separately, [[modules/hourglass#handle_timer_start|`handle_timer_start`]] watches for the not-running→running edge and flips the hourglass **only on the very first start**, so a plain click-to-resume doesn't re-flip.
+Separately, [[modules/hourglass#handle_timer_start|`handle_timer_start`]] watches for the not-running→running edge and flips the hourglass **only on the very first start**, so a plain click-to-resume doesn't re-flip — and it skips even that flip when a color/shape change has queued one via `PendingFlip` (see [[modules/hourglass#Flip-on-change orchestration]]).
 
 ## Important Files
 

@@ -15,12 +15,13 @@ The visual and interactive heart of the app. This module owns the *main* hourgla
 | System | Schedule | Role |
 |--------|----------|------|
 | `spawn_hourglass` | `Startup` | Build the initial hourglass from default config + timer. |
+| `apply_pending_flip` | `Update`, **before** the two rebuild systems | If [[modules/resources#PendingFlip\|`PendingFlip`]] is set, flip the freshly (re)spawned hourglass. |
 | `update_hourglass_color` | `Update` | On config change, set `sand_color` and particle color in place. |
 | `update_hourglass_shape` | `Update` | On shape/mode/color-mode change (Static shape mode), despawn + rebuild. |
 | `update_morphing_shape` | `Update` | In Morphing mode, rebuild each tick with an interpolated shape. |
 | `update_hourglass_timer` | `Update`, after `update_morphing_shape` | Copy `TimerState` → `Hourglass` chambers every frame. |
 | `handle_hourglass_click` | `Update` | Click = pause/play; drag = flip + reset. |
-| `handle_timer_start` | `Update` | Flip the hourglass on the *first* start only. |
+| `handle_timer_start` | `Update` | Flip the hourglass on the *first* start only — unless a `PendingFlip` already owns the flip. |
 
 ## Components
 
@@ -53,6 +54,18 @@ The visual and interactive heart of the app. This module owns the *main* hourgla
 
 `update_hourglass_shape` only acts in `ShapeMode::Static`. It tracks the last shape, shape mode, and **color mode** in `Local` state and rebuilds when any changed — and *also* rebuilds on static color changes (a documented fix: changing color in place left the sand body stale; see [[references/test-coverage|TESTING.md history]]). Rainbow color changes are throttled to avoid rebuilding the mesh every frame. See [[flows/appearance-recreation]] for the full decision tree. This is the project's signature pattern — [[patterns#Recreate-on-change rendering]].
 
+## Flip-on-change orchestration
+
+A color or shape change doesn't just rebuild the hourglass — it also **flips** it (so the sand visibly resets to the top). But the flip can't be issued at the click site: the rebuild despawns the current entity, so a flip applied there would land on the about-to-die entity and, worse, set its `flipping` flag — which the rebuild guard reads as "don't interrupt a flip," silently dropping the color/shape change entirely. The flip has to land on the *new* entity, one frame later.
+
+The three-step handshake, mediated by the [[modules/resources#PendingFlip|`PendingFlip`]] resource:
+
+1. **Request** — the [[modules/color-panel]] / [[modules/shape-panel]] click handlers set `pending_flip.0 = true` (alongside `timer_state.reset()` + start).
+2. **Rebuild** — `update_hourglass_shape` / `update_morphing_shape` despawn the old entity and spawn the replacement that same tick.
+3. **Apply** — `apply_pending_flip` runs (ordered `.before(update_hourglass_shape).before(update_morphing_shape)`) and flips the fresh entity via an `Added<MainHourglass>` query, which only matches the new entity the frame *after* the rebuild command flushes. It mirrors the drag-flip: snap `upper_chamber = 0.0` / `lower_chamber = 1.0` so the crate's end-of-flip chamber swap leaves the top full, then `flip()`. The flag is cleared **only once the flip actually fires** (guarded by `can_flip()`), so a request made while a prior flip was still blocking the rebuild survives to the real respawn.
+
+The companion guard lives in `handle_timer_start`: because a color/shape change also starts the timer, the first-start flip would otherwise fire on the *old* entity (tripping the same rebuild-dropping bug). So `handle_timer_start` **skips its flip whenever `PendingFlip` is set** — the queued flip owns the animation. See [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
+
 ## Morphing
 
 `update_morphing_shape` runs only in `ShapeMode::Morphing`, throttled to ~every 0.01 s. It computes a cycle position `t = (elapsed % 8.0) / 8.0` (full loop every 8 s) and calls `get_morphed_shape_config(t)`, which:
@@ -74,7 +87,7 @@ The interpolation helpers are pure and tested:
 - **Ignores clicks over controls**: skips if the cursor is over a mini-hourglass sprite button (`MiniHourglass`, radius-based) or any Bevy UI button (`Interaction != None`). Without this, selecting a shape/color would also toggle pause.
 - Within ~400 px of the hourglass center: tracks press → release. If movement exceeded the 10 px threshold it's a **drag** → flip + `timer_state.reset()` + start running. Otherwise it's a **click** → toggle `is_running`.
 
-`handle_timer_start` flips the hourglass **only the first time** the timer transitions to running (tracked by a `has_ever_started` `Local`), so resuming from pause doesn't re-flip. The flag resets when the timer is reset to full.
+`handle_timer_start` flips the hourglass **only the first time** the timer transitions to running (tracked by a `has_ever_started` `Local`), so resuming from pause doesn't re-flip. The flag resets when the timer is reset to full. It also **defers to a pending flip**: when `PendingFlip` is set (a color/shape change is queuing its own flip on the rebuilt entity), `handle_timer_start` suppresses the first-start flip — see [[modules/hourglass#Flip-on-change orchestration|Flip-on-change orchestration]].
 
 ## Features Supported
 
@@ -88,7 +101,7 @@ The interpolation helpers are pure and tested:
 
 - `bevy_hourglass` — `Hourglass`, `HourglassMeshBuilder`, `BulbStyle`, `NeckStyle`, `SandSplash`, mesh configs.
 - `bevy` — meshes, materials, input, camera, transforms.
-- [[modules/resources]] — `HourglassConfig`, `TimerState`, the enums.
+- [[modules/resources]] — `HourglassConfig`, `TimerState`, `PendingFlip`, the enums.
 - [[modules/shape-panel]] — imports `MiniHourglass` to exclude its buttons from clicks.
 
 ## Tests

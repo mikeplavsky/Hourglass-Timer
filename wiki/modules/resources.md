@@ -41,6 +41,14 @@ pub struct TimerState {
 - **`add_time(seconds)`** — adds to *both* `duration` and `remaining`, then clamps: `duration` into `0.0..=86400.0` (24 h), then `remaining` into `0.0..=duration`. Order matters — duration is clamped first, so `remaining`'s upper bound uses the already-clamped duration. Negative arguments shrink the timer (the `-1s … -1h` buttons).
 - **`format_time()`** — renders `remaining` as `HH:MM:SS` via integer truncation (`as i32`).
 
+### PendingFlip
+
+```rust
+pub struct PendingFlip(pub bool);
+```
+
+A one-bit signal resource (`Default` is `false`). The color/shape click handlers set it to `true` to **request a flip on the next (re)built hourglass**; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] consumes it. It exists because a color/shape change despawns and rebuilds the hourglass entity, so the flip can't be applied inline at the click site — it has to wait for the fresh entity. See [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
+
 ### Enums
 
 | Enum | Variants | Meaning |
@@ -57,8 +65,9 @@ A `&[Color]` of 8 fixed swatches (black, white, blue, red, purple, green, yellow
 
 - [[features/countdown-timer]] — `TimerState` is its entire data model.
 - [[features/timer-duration-controls]] — `add_time` / `reset`.
-- [[features/color-selection]] — `color`, `color_mode`, `COLOR_PALETTE`.
-- [[features/shape-selection]] / [[features/shape-morphing]] — `shape_type`, `shape_mode`.
+- [[features/color-selection]] — `color`, `color_mode`, `COLOR_PALETTE`; `PendingFlip` (color change flips the hourglass).
+- [[features/shape-selection]] / [[features/shape-morphing]] — `shape_type`, `shape_mode`; `PendingFlip` (shape change flips the hourglass).
+- [[features/hourglass-interaction]] — `PendingFlip` couples a color/shape change to a flip animation.
 
 ## Dependencies
 

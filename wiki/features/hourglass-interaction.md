@@ -1,4 +1,4 @@
-<!-- wiki:sources: src/hourglass.rs, src/ui/pause_overlay.rs -->
+<!-- wiki:sources: src/hourglass.rs, src/ui/pause_overlay.rs, src/resources.rs -->
 
 # Hourglass Interaction
 
@@ -17,7 +17,8 @@ Makes the hourglass itself the primary control. A **click** toggles pause/play; 
 | Component | File | Role |
 |-----------|------|------|
 | click/drag | [[src/hourglass.rs\|hourglass.rs]] | `handle_hourglass_click` — distinguishes click vs. drag, toggles or flips+resets. |
-| first-start flip | [[src/hourglass.rs\|hourglass.rs]] | `handle_timer_start` — flips only on the first start. |
+| first-start flip | [[src/hourglass.rs\|hourglass.rs]] | `handle_timer_start` — flips only on the first start, unless a flip is pending. |
+| color/shape flip | [[src/hourglass.rs\|hourglass.rs]] | `apply_pending_flip` — flips the rebuilt hourglass when [[modules/resources#PendingFlip\|`PendingFlip`]] is set. |
 | drag tracking | [[src/hourglass.rs\|hourglass.rs]] | `DragState { is_dragging, start_position, drag_threshold: 10.0 }`. |
 | pause banner | [[src/ui/pause_overlay.rs\|pause_overlay.rs]] | `update_pause_overlay_visibility`. |
 
@@ -32,6 +33,10 @@ Key modules: [[modules/hourglass]], [[modules/pause-overlay]].
 ## First-start flip
 
 `handle_timer_start` flips the hourglass **only on the first** not-running→running transition (tracked by a `has_ever_started` `Local`). Resuming from a pause doesn't re-flip. The flag resets when the timer returns to full.
+
+## Flip on color/shape change
+
+Changing the color or shape also flips the hourglass, so the sand visibly resets to the top along with the restarted countdown. Because a color/shape change despawns and rebuilds the hourglass entity, the flip is **queued** rather than applied inline: the click handler sets the [[modules/resources#PendingFlip|`PendingFlip`]] resource, and `apply_pending_flip` flips the rebuilt entity the next frame. `handle_timer_start` suppresses its own first-start flip while a `PendingFlip` is outstanding, so the two flip paths never fight over the same (about-to-be-despawned) entity. The full handshake is in [[modules/hourglass#Flip-on-change orchestration]] and [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
 
 ## Pause overlay
 

@@ -15,9 +15,9 @@ Implements the color row at the top of the screen: 8 fixed swatches, a random-co
 | System | Schedule | Role |
 |--------|----------|------|
 | `spawn_color_buttons` | `PostStartup` | Build swatches + random + rainbow buttons under `ColorRowMarker`. |
-| `handle_color_button_clicks` | `Update` | Static swatch → set color, mode `Static`, restart timer. |
-| `handle_random_color_button` | `Update` | Pick a distinct random color, mode `Random`, restart timer. |
-| `handle_rainbow_color_button` | `Update` | Mode `Rainbow`, restart timer. |
+| `handle_color_button_clicks` | `Update` | Static swatch → set color, mode `Static`, restart timer, request flip. |
+| `handle_random_color_button` | `Update` | Pick a distinct random color, mode `Random`, restart timer, request flip. |
+| `handle_rainbow_color_button` | `Update` | Mode `Rainbow`, restart timer, request flip. |
 | `update_rainbow_color` | `Update` | While in `Rainbow`, advance the hue each frame. |
 
 ## The three color modes
@@ -35,9 +35,9 @@ Implements the color row at the top of the screen: 8 fixed swatches, a random-co
 | `rainbow_hue(elapsed_secs)` | `(elapsed * 60) % 360` — hue for the rainbow animation. |
 | `hsl_to_rgb(h, s, l)` | Manual HSL→RGB conversion for vibrant rainbow colors. |
 
-## Side effect: restarts the timer
+## Side effects: restart the timer and flip
 
-The three click handlers (`handle_color_button_clicks`, `handle_random_color_button`, `handle_rainbow_color_button`) all call `timer_state.reset()` then set `is_running = true`. **Changing color restarts the countdown from full and starts it.** This is intentional (see git history: "Restart the timer when the hourglass color changes"). Note `update_rainbow_color`'s per-frame hue updates do *not* restart it — only the initial rainbow button press does. This is documented in a code comment.
+The three click handlers (`handle_color_button_clicks`, `handle_random_color_button`, `handle_rainbow_color_button`) all do three things: `timer_state.reset()`, set `is_running = true`, and set `pending_flip.0 = true`. So **changing color restarts the countdown from full, starts it, and flips the hourglass.** The restart is intentional (git history: "Restart the timer when the hourglass color changes"); the flip is the newer addition (git history: "Flip the hourglass when its color or shape changes"). The flip itself can't happen here — the color change rebuilds the hourglass entity, so the request is handed to [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] via `PendingFlip`. Note `update_rainbow_color`'s per-frame hue updates do *not* restart or flip — only the initial button press does. This is documented in code comments.
 
 ## Features Supported
 
@@ -47,7 +47,7 @@ The three click handlers (`handle_color_button_clicks`, `handle_random_color_but
 
 - `bevy` — UI nodes, `Button`, `Interaction`, `Color`.
 - `rand` — random color generation.
-- [[modules/resources]] — `HourglassConfig`, `ColorMode`, `COLOR_PALETTE`, `TimerState`.
+- [[modules/resources]] — `HourglassConfig`, `ColorMode`, `COLOR_PALETTE`, `TimerState`, `PendingFlip`.
 - [[modules/ui-layout]] — `ColorRowMarker`.
 
 ## Used By

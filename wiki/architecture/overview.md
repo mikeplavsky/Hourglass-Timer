@@ -17,6 +17,7 @@ graph TD
     subgraph Resources["Shared Resources (resources.rs)"]
         Cfg["HourglassConfig<br/>(color, shape, modes)"]
         TS["TimerState<br/>(duration, remaining, running)"]
+        PF["PendingFlip<br/>(deferred flip request)"]
     end
 
     subgraph Plugins["Feature Plugins"]
@@ -41,10 +42,13 @@ graph TD
     TPanel -->|reads/writes| TS
     Color -->|writes| Cfg
     Color -->|resets| TS
+    Color -->|requests flip| PF
     Shape -->|writes| Cfg
     Shape -->|resets| TS
+    Shape -->|requests flip| PF
     HG -->|reads| Cfg
     HG -->|reads/writes| TS
+    HG -->|consumes| PF
     Pause -->|reads| TS
     HG --> Ext
     Shape --> Ext
@@ -74,6 +78,7 @@ graph TD
 - **Resource-mediated, plugin-decoupled architecture** — plugins never call each other; they communicate only by reading/writing the `HourglassConfig` and `TimerState` resources. This is idiomatic Bevy ECS and keeps each plugin independently understandable. Supports every feature. See [[patterns#Resource-mediated communication]].
 - **Logic/visual split for the timer** — the countdown ([[modules/timer]]) mutates only state; a separate system mirrors state into the `Hourglass` ([[modules/hourglass]]). Enables [[features/countdown-timer]] to be unit-tested. See [[flows/countdown-tick]].
 - **Recreate-on-change rendering** — shape/color changes despawn and rebuild the hourglass because `bevy_hourglass` builds meshes from config. Drives [[features/shape-selection]], [[features/shape-morphing]], [[features/color-selection]]. See [[flows/appearance-recreation]] and [[patterns#Recreate-on-change rendering]].
+- **Deferred flip via `PendingFlip`** — because the rebuild despawns the entity, a color/shape change can't flip it inline; it sets a one-shot `PendingFlip` resource that `apply_pending_flip` applies to the rebuilt entity next frame. A signal resource (not a direct call) keeps the panels decoupled from the hourglass. See [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
 - **Pure helpers extracted from systems** — arithmetic-heavy logic is pulled into free functions so it's testable without a Bevy `App`. See [[references/test-coverage]] and [[patterns#Pure helpers extracted from systems]].
 - **Dual UI model** — Bevy UI nodes for the color row / timer panel; world-space sprites for the shape selectors (so they can be real mini-hourglasses). See [[patterns#Dual UI: nodes vs. world sprites]].
 - **One codebase, two feature sets** — native vs. web differ only in `Cargo.toml` feature selection, not in app code. See [[features/web-build]].

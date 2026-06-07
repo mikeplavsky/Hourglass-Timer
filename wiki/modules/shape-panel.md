@@ -17,9 +17,9 @@ Implements the shape selector row: four clickable **mini-hourglasses** (one per 
 | `spawn_shape_buttons` | `PostStartup` | Build 4 mini-hourglasses (Classic/Modern/Slim/Wide). |
 | `spawn_random_shape_button` | `PostStartup` | Build the `?` sprite button. |
 | `spawn_morphing_button` | `PostStartup` | Build the `∞` sprite button. |
-| `handle_shape_button_clicks` | `Update` | Click a mini → set `shape_type`, mode `Static`, restart timer. |
-| `handle_random_shape_button_clicks` | `Update` | Click `?` → pick a distinct random shape, restart timer. |
-| `handle_morphing_button_clicks` | `Update` | Click `∞` → toggle `ShapeMode::Morphing`. |
+| `handle_shape_button_clicks` | `Update` | Click a mini → set `shape_type`, mode `Static`, restart timer, request flip. |
+| `handle_random_shape_button_clicks` | `Update` | Click `?` → pick a distinct random shape, restart timer, request flip. |
+| `handle_morphing_button_clicks` | `Update` | Click `∞` → toggle `ShapeMode::Morphing` (no restart, no flip). |
 | `update_mini_hourglass_colors` | `Update` | Keep mini sand color in sync with config. |
 | `handle_hover_effects` | `Update` | Tag the hovered sprite with `HoveredHourglass`. |
 | `update_hourglass_layering` | `Update` | Scale sprites: 1.3 hovered, 1.15 selected, 1.0 default. |
@@ -43,9 +43,9 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 
 `handle_hover_effects` does distance-based hit testing (radius scaled by current sprite scale) and maintains a single `HoveredHourglass` tag. `update_hourglass_layering` reads that plus the current config to pick a scale: **1.3× hovered, 1.15× selected** (shape matches config, or morphing active for `∞`), else **1.0×**. The `?` button has no persistent selected state — it's a momentary action.
 
-## Side effects: restarts the timer
+## Side effects: restart the timer and flip
 
-`handle_shape_button_clicks` and `handle_random_shape_button_clicks` both `reset()` + start the timer — selecting a shape restarts the countdown (git history: "restart timer on shape change"). `handle_morphing_button_clicks` only toggles the mode and does **not** restart. `pick_distinct_shape` re-rolls until it returns a shape different from the current one.
+`handle_shape_button_clicks` and `handle_random_shape_button_clicks` both `reset()` + start the timer **and** set `pending_flip.0 = true` — selecting a shape restarts the countdown and flips the hourglass (git history: "restart timer on shape change", then "Flip the hourglass when its color or shape changes"). The flip is queued rather than applied inline because the shape change rebuilds the entity; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] flips the rebuilt one. `handle_morphing_button_clicks` only toggles the mode and does **not** restart or flip. `pick_distinct_shape` re-rolls until it returns a shape different from the current one.
 
 ## Features Supported
 
@@ -57,7 +57,7 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 - `bevy` / `bevy::asset::embedded_asset` — sprites, text, embedded font.
 - `bevy_hourglass` — mini-hourglass meshes, `HourglassMeshSandState`.
 - `rand` — random shape.
-- [[modules/resources]], [[modules/ui-layout]] (`ShapeRowMarker`), [[modules/hourglass]] (`get_mini_shape_config`).
+- [[modules/resources]] (incl. `PendingFlip`), [[modules/ui-layout]] (`ShapeRowMarker`), [[modules/hourglass]] (`get_mini_shape_config`, `within_click_radius`).
 
 ## Tests
 

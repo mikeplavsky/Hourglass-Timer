@@ -21,19 +21,19 @@ Shows a "PAUSED" banner over the hourglass when a *running, mid-countdown* timer
 
 `spawn_pause_overlay` creates an absolutely-positioned 200×100 node, semi-transparent black, `ZIndex(100)` so it sits above the hourglass, starting `Display::None`.
 
-`update_pause_overlay_visibility` shows it only when **all three** hold:
+`update_pause_overlay_visibility` delegates the decision to the pure helper `pause_overlay_should_show(is_running, remaining, duration)`, which returns `true` only when **all three** hold:
 
 ```rust
-node.display = if !current_running && current_has_time && timer_was_started {
-    Display::Flex
-} else {
-    Display::None
-};
+fn pause_overlay_should_show(is_running: bool, remaining: f32, duration: f32) -> bool {
+    !is_running && remaining > 0.0 && remaining < duration
+}
 ```
 
-- `!current_running` — the timer is paused.
-- `current_has_time` — `remaining > 0.0` (don't show after it hits zero).
-- `timer_was_started` — `remaining < duration`, i.e. it had been counting down (don't show in the fresh, never-started state).
+- `!is_running` — the timer is paused.
+- `remaining > 0.0` — don't show after it hits zero (finished).
+- `remaining < duration` — it had been counting down (don't show in the fresh, never-started state).
+
+Extracting the condition is what makes it unit-testable without a Bevy `App` (see [[patterns#Pure helpers extracted from systems]]); the system itself only maps the `bool` to `Display::Flex` / `Display::None`.
 
 The system guards its work behind a `Local<Option<bool>>` (`last_state`) tracking the previous `is_running`, so it only recomputes when the running flag actually changes. (Note: because the gate is keyed on `is_running` alone, the recompute fires on the running→paused / paused→running edges — exactly when the overlay needs to appear or disappear.)
 
