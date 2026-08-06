@@ -1,7 +1,7 @@
 [package]
 name = "hourglass-timer"
 authors = ["Edouard Poitras <edouardpoitras@gmail.com>"]
-version = "0.1.1"
+version = "0.1.5"
 edition = "2024"
 
 [dependencies]
@@ -18,6 +18,16 @@ tracing = { version = "0.1", features = [
     "max_level_debug",
     "release_max_level_warn",
 ] }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+wasm-bindgen = { version = "0.2.100", optional = true }
+js-sys = { version = "0.3.77", optional = true }
+web-sys = { version = "0.3.77", features = [
+    "CustomEvent",
+    "CustomEventInit",
+    "EventTarget",
+    "Window",
+], optional = true }
 
 [dev-dependencies]
 # Approximate floating-point comparisons for unit tests.
@@ -38,6 +48,14 @@ approx = "0.5"
 [features]
 # Default to a native dev build.
 default = ["dev_native"]
+chrome_extension = [
+    "bevy/webgpu",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:wasm-bindgen",
+    "dep:js-sys",
+    "dep:web-sys",
+]
 dev = [
     # Improve compile times for dev builds by linking Bevy as a dynamic library.
     "bevy/dynamic_linking",

@@ -1,5 +1,8 @@
-use crate::resources::{HourglassConfig, HourglassShape, PendingFlip, ShapeMode, TimerState};
-use crate::ui::ShapeRowMarker;
+use crate::resources::{
+    AppearanceStateChanged, HourglassConfig, HourglassShape, PendingFlip, ShapeMode,
+};
+use crate::timer::{TimerCommand, TimerSet};
+use crate::ui::{AppearancePanelVisible, ShapeRowMarker};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
@@ -32,11 +35,18 @@ impl Plugin for ShapePanelPlugin {
                 handle_shape_button_clicks,
                 handle_random_shape_button_clicks,
                 handle_morphing_button_clicks,
+            )
+                .in_set(TimerSet::Input),
+        )
+        .add_systems(
+            Update,
+            (
                 update_mini_hourglass_colors,
                 handle_hover_effects,
                 update_hourglass_layering,
                 update_hover_timers,
                 update_mini_hourglass_positions,
+                update_shape_panel_visibility,
             ),
         );
     }
@@ -53,7 +63,11 @@ fn handle_hover_effects(
         (With<RandomShapeButton>, With<MiniHourglass>),
     >,
     hovered_query: Query<Entity, With<HoveredHourglass>>,
+    appearance_visible: Res<AppearancePanelVisible>,
 ) {
+    if !appearance_visible.0 {
+        return;
+    }
     if let Ok(window) = windows.single() {
         if let Some(cursor_position) = window.cursor_position() {
             if let Ok((camera, camera_transform)) = camera_query.single() {
@@ -231,7 +245,16 @@ fn update_mini_hourglass_positions(
                 let window_width = window.width();
 
                 // Calculate shape row position based on UI layout:
-                let shape_row_center_y = 60.0;
+                let shape_row_center_y = if cfg!(feature = "chrome_extension") {
+                    112.0
+                } else {
+                    60.0
+                };
+                let horizontal_scale = if cfg!(feature = "chrome_extension") {
+                    ((window_width - 36.0) / 280.0).clamp(0.55, 1.0)
+                } else {
+                    1.0
+                };
 
                 // Convert screen space to world space for the shape row center
                 let shape_row_screen_pos = Vec2::new(window_width / 2.0, shape_row_center_y);
@@ -243,7 +266,12 @@ fn update_mini_hourglass_positions(
                     for (mut transform, mut mini_hourglass) in mini_hourglass_query.iter_mut() {
                         // Calculate new position based on original X offset from center
                         let new_position = Vec3::new(
-                            shape_row_world_pos.x + mini_hourglass.original_x,
+                            shape_row_world_pos.x
+                                + if cfg!(feature = "chrome_extension") {
+                                    (mini_hourglass.original_x - 25.0) * horizontal_scale
+                                } else {
+                                    mini_hourglass.original_x
+                                },
                             shape_row_world_pos.y,
                             10.0, // Keep elevated Z position
                         );
@@ -255,6 +283,22 @@ fn update_mini_hourglass_positions(
                 }
             }
         }
+    }
+}
+
+fn update_shape_panel_visibility(
+    appearance_visible: Res<AppearancePanelVisible>,
+    mut query: Query<&mut Visibility, With<MiniHourglass>>,
+) {
+    if !appearance_visible.is_changed() {
+        return;
+    }
+    for mut visibility in &mut query {
+        *visibility = if appearance_visible.0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
@@ -424,9 +468,14 @@ fn handle_random_shape_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     random_shape_button_query: Query<&Transform, (With<RandomShapeButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
-    mut timer_state: ResMut<TimerState>,
     mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
+    appearance_visible: Res<AppearancePanelVisible>,
 ) {
+    if !appearance_visible.0 {
+        return;
+    }
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
@@ -446,8 +495,8 @@ fn handle_random_shape_button_clicks(
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
                                 // Selecting a shape starts the countdown over and flips
-                                timer_state.reset();
-                                timer_state.is_running = true;
+                                timer_commands.write(TimerCommand::Restart);
+                                appearance_changed.write_default();
                                 pending_flip.0 = true;
                             }
                         }
@@ -464,7 +513,12 @@ fn handle_morphing_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     morphing_button_query: Query<&Transform, (With<MorphingButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
+    appearance_visible: Res<AppearancePanelVisible>,
 ) {
+    if !appearance_visible.0 {
+        return;
+    }
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
@@ -487,6 +541,7 @@ fn handle_morphing_button_clicks(
                                 } else {
                                     config.shape_mode = ShapeMode::Static;
                                 }
+                                appearance_changed.write_default();
                             }
                         }
                     }
@@ -502,9 +557,14 @@ fn handle_shape_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mini_hourglass_query: Query<(&Transform, &ShapeButton), With<MiniHourglass>>,
     mut config: ResMut<HourglassConfig>,
-    mut timer_state: ResMut<TimerState>,
     mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
+    appearance_visible: Res<AppearancePanelVisible>,
 ) {
+    if !appearance_visible.0 {
+        return;
+    }
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
@@ -524,8 +584,8 @@ fn handle_shape_button_clicks(
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
                                 // Selecting a shape starts the countdown over and flips
-                                timer_state.reset();
-                                timer_state.is_running = true;
+                                timer_commands.write(TimerCommand::Restart);
+                                appearance_changed.write_default();
                                 pending_flip.0 = true;
                                 break;
                             }

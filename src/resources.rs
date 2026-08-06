@@ -43,7 +43,7 @@ pub enum ShapeMode {
 }
 
 /// Resource to manage the countdown timer
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct TimerState {
     pub duration: f32,  // Total duration in seconds
     pub remaining: f32, // Remaining time in seconds
@@ -87,6 +87,11 @@ impl TimerState {
 /// (re)spawned main hourglass. Consumed by `apply_pending_flip`.
 #[derive(Resource, Default)]
 pub struct PendingFlip(pub bool);
+
+/// Emitted for user-selected appearance changes. Continuous rainbow and
+/// morphing animation frames intentionally do not emit it.
+#[derive(Event, Debug, Clone, Copy, Default)]
+pub struct AppearanceStateChanged;
 
 // Color palette for the color selector
 pub const COLOR_PALETTE: &[Color] = &[

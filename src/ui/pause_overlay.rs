@@ -22,17 +22,55 @@ fn spawn_pause_overlay(mut commands: Commands) {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(0.0),
                 top: Val::Percent(0.0),
-                width: Val::Px(200.0),
-                height: Val::Px(100.0),
+                width: if cfg!(feature = "chrome_extension") {
+                    Val::Percent(100.0)
+                } else {
+                    Val::Px(200.0)
+                },
+                height: if cfg!(feature = "chrome_extension") {
+                    Val::Percent(100.0)
+                } else {
+                    Val::Px(100.0)
+                },
                 display: Display::None, // Start hidden
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)), // Semi-transparent black background
+            BackgroundColor(if cfg!(feature = "chrome_extension") {
+                Color::NONE
+            } else {
+                Color::srgba(0.0, 0.0, 0.0, 0.6)
+            }),
             ZIndex(100), // Ensure it appears above the hourglass
         ))
         .with_children(|parent| {
+            #[cfg(feature = "chrome_extension")]
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Px(170.0),
+                        height: Val::Px(64.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.78)),
+                    BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("PAUSED"),
+                        TextFont {
+                            font_size: 34.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+
+            #[cfg(not(feature = "chrome_extension"))]
             parent.spawn((
                 Text::new("PAUSED"),
                 TextFont {

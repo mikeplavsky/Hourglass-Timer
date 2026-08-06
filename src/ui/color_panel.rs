@@ -1,4 +1,7 @@
-use crate::resources::{COLOR_PALETTE, ColorMode, HourglassConfig, PendingFlip, TimerState};
+use crate::resources::{
+    AppearanceStateChanged, COLOR_PALETTE, ColorMode, HourglassConfig, PendingFlip,
+};
+use crate::timer::{TimerCommand, TimerSet};
 use crate::ui::ColorRowMarker;
 use bevy::prelude::*;
 use rand::Rng;
@@ -14,9 +17,10 @@ impl Plugin for ColorPanelPlugin {
                     handle_color_button_clicks,
                     handle_random_color_button,
                     handle_rainbow_color_button,
-                    update_rainbow_color,
-                ),
-            );
+                )
+                    .in_set(TimerSet::Input),
+            )
+            .add_systems(Update, (update_rainbow_color,));
     }
 }
 
@@ -193,8 +197,9 @@ fn handle_color_button_clicks(
         (Changed<Interaction>, With<Button>),
     >,
     mut config: ResMut<HourglassConfig>,
-    mut timer_state: ResMut<TimerState>,
     mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
 ) {
     for (interaction, color_button, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -202,8 +207,8 @@ fn handle_color_button_clicks(
                 config.color = color_button.color;
                 config.color_mode = ColorMode::Static;
                 // Changing the color starts the countdown over from full and flips
-                timer_state.reset();
-                timer_state.is_running = true;
+                timer_commands.write(TimerCommand::Restart);
+                appearance_changed.write_default();
                 pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
@@ -251,8 +256,9 @@ fn handle_random_color_button(
         (Changed<Interaction>, With<RandomColorButton>),
     >,
     mut config: ResMut<HourglassConfig>,
-    mut timer_state: ResMut<TimerState>,
     mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
 ) {
     for (interaction, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -266,8 +272,8 @@ fn handle_random_color_button(
                 config.color = new_color.into();
                 config.color_mode = ColorMode::Random;
                 // Changing the color starts the countdown over from full and flips
-                timer_state.reset();
-                timer_state.is_running = true;
+                timer_commands.write(TimerCommand::Restart);
+                appearance_changed.write_default();
                 pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
@@ -287,8 +293,9 @@ fn handle_rainbow_color_button(
         (Changed<Interaction>, With<RainbowColorButton>),
     >,
     mut config: ResMut<HourglassConfig>,
-    mut timer_state: ResMut<TimerState>,
     mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mut appearance_changed: EventWriter<AppearanceStateChanged>,
 ) {
     for (interaction, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -296,8 +303,8 @@ fn handle_rainbow_color_button(
                 config.color_mode = ColorMode::Rainbow;
                 // Activating rainbow starts the countdown over from full and flips
                 // (the continuous cycling in update_rainbow_color does not restart it)
-                timer_state.reset();
-                timer_state.is_running = true;
+                timer_commands.write(TimerCommand::Restart);
+                appearance_changed.write_default();
                 pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
@@ -421,7 +428,10 @@ mod tests {
             let mut rng = StdRng::seed_from_u64(seed);
             let c = pick_distinct_color(current, 0.09, &mut rng);
             for ch in [c.red, c.green, c.blue] {
-                assert!((0.0..1.0).contains(&ch), "seed {seed}: channel {ch} out of range");
+                assert!(
+                    (0.0..1.0).contains(&ch),
+                    "seed {seed}: channel {ch} out of range"
+                );
             }
         }
     }

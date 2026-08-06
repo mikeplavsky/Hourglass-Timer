@@ -1,7 +1,10 @@
 use crate::resources::{
     ColorMode, HourglassConfig, HourglassShape, PendingFlip, ShapeMode, TimerState,
 };
+use crate::timer::{TimerCommand, TimerSet};
 use crate::ui::shape_panel::MiniHourglass;
+#[cfg(feature = "chrome_extension")]
+use crate::ui::{AppearancePanelVisible, TimerPanelVisible};
 use bevy::prelude::*;
 use bevy_hourglass::{
     BulbStyle, Hourglass, HourglassMeshBodyConfig, HourglassMeshBuilder, HourglassMeshPlatesConfig,
@@ -26,10 +29,17 @@ impl Plugin for HourglassPlugin {
                     update_hourglass_shape,
                     update_morphing_shape,
                     update_hourglass_timer.after(update_morphing_shape),
-                    handle_hourglass_click,
                     handle_timer_start,
-                ),
-            );
+                )
+                    .in_set(TimerSet::Observe),
+            )
+            .add_systems(Update, handle_hourglass_click.in_set(TimerSet::Input));
+
+        #[cfg(feature = "chrome_extension")]
+        app.add_systems(
+            Update,
+            update_sidebar_hourglass_scale.in_set(TimerSet::Observe),
+        );
     }
 }
 
@@ -71,6 +81,49 @@ pub(crate) fn within_click_radius(
 /// `threshold` is still treated as a click).
 pub(crate) fn exceeds_drag_threshold(start: Vec2, current: Vec2, threshold: f32) -> bool {
     current.distance(start) > threshold
+}
+
+fn main_hourglass_hit_radius(scale: f32) -> f32 {
+    if cfg!(feature = "chrome_extension") {
+        220.0 * scale.max(0.0)
+    } else {
+        400.0
+    }
+}
+
+#[cfg(feature = "chrome_extension")]
+fn sidebar_hourglass_scale(
+    window_width: f32,
+    window_height: f32,
+    appearance_open: bool,
+    timer_adjustments_open: bool,
+) -> f32 {
+    let top_reserved = if appearance_open { 150.0 } else { 42.0 };
+    let bottom_reserved = if timer_adjustments_open { 190.0 } else { 116.0 };
+    let horizontal = (window_width - 24.0) / 400.0;
+    let vertical = (window_height - top_reserved - bottom_reserved - 24.0) / 480.0;
+    horizontal.min(vertical).clamp(0.35, 1.0)
+}
+
+#[cfg(feature = "chrome_extension")]
+fn update_sidebar_hourglass_scale(
+    windows: Query<&Window>,
+    appearance_visible: Res<AppearancePanelVisible>,
+    timer_panel_visible: Res<TimerPanelVisible>,
+    mut query: Query<&mut Transform, With<MainHourglass>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let scale = sidebar_hourglass_scale(
+        window.width(),
+        window.height(),
+        appearance_visible.0,
+        timer_panel_visible.0,
+    );
+    for mut transform in &mut query {
+        transform.scale = Vec3::splat(scale);
+    }
 }
 
 // Helper function to create main hourglass configurations for different shapes
@@ -458,8 +511,11 @@ fn handle_hourglass_click(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
     mut hourglass_query: Query<(&Transform, &mut DragState, &mut Hourglass), With<MainHourglass>>,
-    mut timer_state: ResMut<TimerState>,
-    mini_button_query: Query<&Transform, (With<MiniHourglass>, Without<MainHourglass>)>,
+    mut timer_commands: EventWriter<TimerCommand>,
+    mini_button_query: Query<
+        (&Transform, &Visibility),
+        (With<MiniHourglass>, Without<MainHourglass>),
+    >,
     ui_interaction_query: Query<&Interaction>,
 ) {
     if let Ok(window) = windows.single() {
@@ -476,14 +532,16 @@ fn handle_hourglass_click(
                         // selecting a shape/color would also toggle the timer's pause state.
 
                         // Sprite buttons (shape/morphing/random) carry MiniHourglass.
-                        let over_mini_button = mini_button_query.iter().any(|transform| {
-                            within_click_radius(
-                                world_position,
-                                transform.translation.truncate(),
-                                30.0,
-                                transform.scale.x,
-                            )
-                        });
+                        let over_mini_button =
+                            mini_button_query.iter().any(|(transform, visibility)| {
+                                *visibility != Visibility::Hidden
+                                    && within_click_radius(
+                                        world_position,
+                                        transform.translation.truncate(),
+                                        30.0,
+                                        transform.scale.x,
+                                    )
+                            });
 
                         // Bevy UI buttons (color row + timer panel) use Interaction.
                         let over_ui_button = ui_interaction_query
@@ -498,7 +556,7 @@ fn handle_hourglass_click(
                         let hourglass_pos = hourglass_transform.translation.truncate();
                         let distance = world_position.distance(hourglass_pos);
 
-                        if distance < 400.0 {
+                        if distance < main_hourglass_hit_radius(hourglass_transform.scale.x) {
                             // Larger area to cover most of the hourglass
                             // Handle mouse down - start potential drag
                             if mouse_input.just_pressed(MouseButton::Left) {
@@ -529,20 +587,11 @@ fn handle_hourglass_click(
 
                                         // Then trigger the flip animation
                                         hourglass.flip();
-                                        timer_state.reset();
-
-                                        // Start the timer automatically after flip
-                                        timer_state.is_running = true;
+                                        timer_commands.write(TimerCommand::Restart);
                                     }
                                 } else {
                                     // Simple click - toggle pause/play
-                                    if timer_state.is_running {
-                                        // Pause the timer if it's running
-                                        timer_state.is_running = false;
-                                    } else {
-                                        // Start the timer if it's not running
-                                        timer_state.is_running = true;
-                                    }
+                                    timer_commands.write(TimerCommand::Toggle);
                                 }
 
                                 // Reset drag state
@@ -1118,8 +1167,18 @@ mod tests {
         assert!(within_click_radius(center, center, 30.0, 1.0));
         assert!(within_click_radius(Vec2::new(29.0, 0.0), center, 30.0, 1.0));
         // Exactly on the boundary is a miss (strict `<`), as is beyond it.
-        assert!(!within_click_radius(Vec2::new(30.0, 0.0), center, 30.0, 1.0));
-        assert!(!within_click_radius(Vec2::new(31.0, 0.0), center, 30.0, 1.0));
+        assert!(!within_click_radius(
+            Vec2::new(30.0, 0.0),
+            center,
+            30.0,
+            1.0
+        ));
+        assert!(!within_click_radius(
+            Vec2::new(31.0, 0.0),
+            center,
+            30.0,
+            1.0
+        ));
     }
 
     #[test]
@@ -1141,7 +1200,12 @@ mod tests {
     fn within_click_radius_handles_offset_center_and_smaller_radius() {
         let center = Vec2::new(100.0, 50.0);
         // 10px away with the 20px button radius -> hit.
-        assert!(within_click_radius(Vec2::new(100.0, 60.0), center, 20.0, 1.0));
+        assert!(within_click_radius(
+            Vec2::new(100.0, 60.0),
+            center,
+            20.0,
+            1.0
+        ));
         // Exactly 20px away -> miss.
         assert!(!within_click_radius(
             Vec2::new(120.0, 50.0),
@@ -1149,6 +1213,24 @@ mod tests {
             20.0,
             1.0
         ));
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn sidebar_scale_responds_to_width_and_open_sections() {
+        let collapsed = sidebar_hourglass_scale(360.0, 800.0, false, false);
+        let appearance_open = sidebar_hourglass_scale(360.0, 800.0, true, false);
+        let narrow = sidebar_hourglass_scale(260.0, 800.0, false, false);
+        assert!(appearance_open <= collapsed);
+        assert!(narrow < collapsed);
+        assert!((0.35..=1.0).contains(&collapsed));
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn sidebar_hit_radius_tracks_render_scale() {
+        assert_abs_diff_eq!(main_hourglass_hit_radius(1.0), 220.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(main_hourglass_hit_radius(0.5), 110.0, epsilon = 1e-6);
     }
 
     // --- exceeds_drag_threshold -------------------------------------------
