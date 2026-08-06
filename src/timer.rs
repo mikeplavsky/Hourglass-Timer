@@ -13,6 +13,7 @@ pub enum TimerSet {
     Restore,
     Input,
     Apply,
+    Deadline,
     Tick,
     Observe,
 }
@@ -46,6 +47,7 @@ impl Plugin for TimerPlugin {
                     TimerSet::Restore,
                     TimerSet::Input,
                     TimerSet::Apply,
+                    TimerSet::Deadline,
                     TimerSet::Tick,
                     TimerSet::Observe,
                 )

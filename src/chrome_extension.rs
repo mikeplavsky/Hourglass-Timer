@@ -36,15 +36,12 @@ impl Plugin for ChromeExtensionPlugin {
             .add_systems(PreStartup, initialize_extension_bridge)
             .add_systems(PostStartup, signal_extension_ready)
             .add_systems(Update, apply_queued_snapshots.in_set(TimerSet::Restore))
-            .add_systems(Update, update_wall_clock_timer.in_set(TimerSet::Tick))
             .add_systems(
                 Update,
-                (
-                    update_deadline_from_changes,
-                    emit_extension_state.after(update_deadline_from_changes),
-                )
-                    .in_set(TimerSet::Observe),
-            );
+                update_deadline_from_changes.in_set(TimerSet::Deadline),
+            )
+            .add_systems(Update, update_wall_clock_timer.in_set(TimerSet::Tick))
+            .add_systems(Update, emit_extension_state.in_set(TimerSet::Observe));
     }
 }
 
@@ -264,7 +261,7 @@ fn apply_queued_snapshots() {}
 
 fn update_wall_clock_timer(
     mut timer_state: ResMut<TimerState>,
-    deadline: Res<ExtensionDeadline>,
+    mut deadline: ResMut<ExtensionDeadline>,
     mut changed: EventWriter<TimerStateChanged>,
 ) {
     if !timer_state.is_running {
@@ -278,6 +275,7 @@ fn update_wall_clock_timer(
     timer_state.remaining = (remaining_ms / 1000.0) as f32;
     if remaining_ms <= 0.0 {
         timer_state.is_running = false;
+        deadline.0 = None;
         changed.write(TimerStateChanged(TimerCommand::Finish));
     }
 }
@@ -565,6 +563,35 @@ mod tests {
         assert_eq!(timer.remaining, 180.0);
         assert!(!timer.is_running);
         assert_eq!(deadline.0, None);
+    }
+
+    #[test]
+    fn restart_replaces_stale_deadline_before_wall_clock_tick() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, crate::timer::TimerPlugin));
+        app.add_event::<AppearanceStateChanged>();
+        app.insert_resource(TimerState {
+            duration: 180.0,
+            remaining: 10.0,
+            is_running: true,
+        });
+        app.add_plugins(ChromeExtensionPlugin);
+        app.world_mut().resource_mut::<ExtensionDeadline>().0 = Some(now_ms() + 10_000.0);
+        app.add_systems(
+            Update,
+            (|mut commands: EventWriter<TimerCommand>| {
+                commands.write(TimerCommand::Restart);
+            })
+            .in_set(TimerSet::Input),
+        );
+
+        app.update();
+
+        let timer = app.world().resource::<TimerState>();
+        assert!(timer.is_running);
+        assert!(timer.remaining > 179.0);
+        let deadline = app.world().resource::<ExtensionDeadline>().0.unwrap();
+        assert!(deadline > now_ms() + 179_000.0);
     }
 
     #[test]
