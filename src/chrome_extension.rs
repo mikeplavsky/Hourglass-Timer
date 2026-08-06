@@ -400,23 +400,37 @@ fn apply_snapshot(
         return false;
     }
 
-    let duration_ms = finite_clamp(snapshot.duration_ms, 0.0, MAX_DURATION_MS);
-    let stored_remaining_ms = finite_clamp(snapshot.remaining_ms, 0.0, duration_ms);
+    let has_usable_duration = snapshot.duration_ms.is_finite() && snapshot.duration_ms > 0.0;
+    let duration_ms = if has_usable_duration {
+        finite_clamp(snapshot.duration_ms, 0.0, MAX_DURATION_MS)
+    } else {
+        f64::from(TimerState::default().duration) * 1000.0
+    };
+    let stored_remaining_ms = if has_usable_duration {
+        finite_clamp(snapshot.remaining_ms, 0.0, duration_ms)
+    } else {
+        duration_ms
+    };
     let mut resolved_deadline = snapshot.deadline_ms.filter(|value| value.is_finite());
 
-    let (remaining_ms, is_running) = match snapshot.status {
-        ExtensionTimerStatus::Running => {
-            let value = resolved_deadline
-                .map(|value| (value - now_ms).max(0.0))
-                .unwrap_or(stored_remaining_ms);
-            if resolved_deadline.is_none() && value > 0.0 {
-                resolved_deadline = Some(now_ms + value);
+    let (remaining_ms, is_running) = if !has_usable_duration {
+        resolved_deadline = None;
+        (duration_ms, false)
+    } else {
+        match snapshot.status {
+            ExtensionTimerStatus::Running => {
+                let value = resolved_deadline
+                    .map(|value| (value - now_ms).max(0.0))
+                    .unwrap_or(stored_remaining_ms);
+                if resolved_deadline.is_none() && value > 0.0 {
+                    resolved_deadline = Some(now_ms + value);
+                }
+                (value, value > 0.0)
             }
-            (value, value > 0.0)
+            ExtensionTimerStatus::Paused => (stored_remaining_ms, false),
+            ExtensionTimerStatus::Idle => (duration_ms, false),
+            ExtensionTimerStatus::Finished => (0.0, false),
         }
-        ExtensionTimerStatus::Paused => (stored_remaining_ms, false),
-        ExtensionTimerStatus::Idle => (duration_ms, false),
-        ExtensionTimerStatus::Finished => (0.0, false),
     };
 
     timer_state.duration = (duration_ms / 1000.0) as f32;
@@ -530,6 +544,27 @@ mod tests {
             &mut HourglassConfig::default(),
         ));
         assert_eq!(timer, before);
+    }
+
+    #[test]
+    fn zero_duration_restore_recovers_three_minute_default() {
+        let mut value = snapshot(ExtensionTimerStatus::Finished, None);
+        value.duration_ms = 0.0;
+        value.remaining_ms = 0.0;
+        let mut timer = TimerState::default();
+        let mut deadline = ExtensionDeadline::default();
+        let mut config = HourglassConfig::default();
+        assert!(apply_snapshot(
+            value,
+            100_000.0,
+            &mut timer,
+            &mut deadline,
+            &mut config,
+        ));
+        assert_eq!(timer.duration, 180.0);
+        assert_eq!(timer.remaining, 180.0);
+        assert!(!timer.is_running);
+        assert_eq!(deadline.0, None);
     }
 
     #[test]

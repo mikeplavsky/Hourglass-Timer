@@ -709,6 +709,23 @@ mod tests {
     }
 
     #[test]
+    fn time_adjust_button_recovers_from_zero() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 0.0,
+                remaining: 0.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: 60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSet::Input));
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 60.0);
+        assert_eq!(ts.remaining, 60.0);
+    }
+
+    #[test]
     fn time_adjust_button_negative_subtracts_time() {
         let mut app = pressed_button_app(
             TimerState {

@@ -104,3 +104,15 @@ test("invalid snapshots fall back to safe defaults", () => {
   const result = normalizeState({ version: 99, durationMs: Infinity });
   assert.deepEqual(result, defaultState());
 });
+
+test("zero-duration snapshots recover to the three-minute default", () => {
+  const result = normalizeState({
+    ...defaultState(),
+    durationMs: 0,
+    remainingMs: 0,
+    status: "finished"
+  });
+  assert.equal(result.durationMs, 180_000);
+  assert.equal(result.remainingMs, 180_000);
+  assert.equal(result.status, "idle");
+});
