@@ -2,9 +2,7 @@ use crate::resources::{
     AppearanceStateChanged, HourglassConfig, HourglassShape, PendingFlip, SAND_COLOR, ShapeMode,
 };
 use crate::timer::{TimerCommand, TimerSystems};
-use crate::ui::{AppearancePanelVisible, ShapeRowMarker};
-#[cfg(feature = "chrome_extension")]
-use crate::ui::{SIDEBAR_APPEARANCE_PADDING, SIDEBAR_COLOR_ROW_HEIGHT, SIDEBAR_SHAPE_ROW_HEIGHT};
+use crate::ui::{AppearancePanelVisible, ShapeRowMarker, extension_appearance_change_command};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
@@ -236,26 +234,31 @@ fn update_mini_hourglass_colors(
 fn update_mini_hourglass_positions(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    shape_row_query: Query<&Node, With<ShapeRowMarker>>,
+    shape_row_query: Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
     mut mini_hourglass_query: Query<(&mut Transform, &mut MiniHourglass), With<MiniHourglass>>,
 ) {
-    // Check if the shape row UI node exists to ensure proper positioning
-    if shape_row_query.single().is_ok() {
+    if let Ok((shape_row_node, shape_row_transform)) = shape_row_query.single() {
         if let Ok(window) = windows.single() {
             if let Ok((camera, camera_transform)) = camera_query.single() {
-                // Calculate the center of the shape row area
                 let window_width = window.width();
-
-                // Calculate shape row position based on UI layout:
-                let shape_row_center_y = shape_preview_center_y();
                 let horizontal_scale = if cfg!(feature = "chrome_extension") {
                     ((window_width - 36.0) / 280.0).clamp(0.55, 1.0)
                 } else {
                     1.0
                 };
 
-                // Convert screen space to world space for the shape row center
-                let shape_row_screen_pos = Vec2::new(window_width / 2.0, shape_row_center_y);
+                #[cfg(feature = "chrome_extension")]
+                let Some(shape_row_screen_pos) =
+                    extension_shape_row_screen_position(shape_row_node, shape_row_transform)
+                else {
+                    return;
+                };
+
+                #[cfg(not(feature = "chrome_extension"))]
+                let shape_row_screen_pos = {
+                    let _ = (shape_row_node, shape_row_transform);
+                    Vec2::new(window_width / 2.0, 60.0)
+                };
 
                 if let Ok(shape_row_world_pos) =
                     camera.viewport_to_world_2d(camera_transform, shape_row_screen_pos)
@@ -284,16 +287,12 @@ fn update_mini_hourglass_positions(
     }
 }
 
-fn shape_preview_center_y() -> f32 {
-    #[cfg(feature = "chrome_extension")]
-    {
-        SIDEBAR_APPEARANCE_PADDING + SIDEBAR_COLOR_ROW_HEIGHT + SIDEBAR_SHAPE_ROW_HEIGHT / 2.0
-    }
-
-    #[cfg(not(feature = "chrome_extension"))]
-    {
-        60.0
-    }
+#[cfg(feature = "chrome_extension")]
+fn extension_shape_row_screen_position(
+    node: &ComputedNode,
+    transform: &GlobalTransform,
+) -> Option<Vec2> {
+    (!node.is_empty()).then(|| transform.translation().truncate() * node.inverse_scale_factor())
 }
 
 fn update_shape_panel_visibility(
@@ -471,11 +470,6 @@ fn pick_distinct_shape(current: HourglassShape, rng: &mut impl Rng) -> Hourglass
     new_shape
 }
 
-fn shape_change_command(pending_flip: &mut PendingFlip) -> TimerCommand {
-    pending_flip.0 = true;
-    TimerCommand::Restart
-}
-
 fn handle_random_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -508,8 +502,11 @@ fn handle_random_shape_button_clicks(
                                 let new_shape = pick_distinct_shape(config.shape_type, &mut rng);
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
-                                // Selecting a shape starts the countdown over and flips
-                                timer_commands.write(shape_change_command(&mut pending_flip));
+                                if let Some(command) =
+                                    extension_appearance_change_command(&mut pending_flip)
+                                {
+                                    timer_commands.write(command);
+                                }
                                 appearance_changed.write_default();
                             }
                         }
@@ -556,7 +553,11 @@ fn handle_morphing_button_clicks(
                                 } else {
                                     config.shape_mode = ShapeMode::Static;
                                 }
-                                timer_commands.write(shape_change_command(&mut pending_flip));
+                                if let Some(command) =
+                                    extension_appearance_change_command(&mut pending_flip)
+                                {
+                                    timer_commands.write(command);
+                                }
                                 appearance_changed.write_default();
                             }
                         }
@@ -599,8 +600,11 @@ fn handle_shape_button_clicks(
                             ) {
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
-                                // Selecting a shape starts the countdown over and flips
-                                timer_commands.write(shape_change_command(&mut pending_flip));
+                                if let Some(command) =
+                                    extension_appearance_change_command(&mut pending_flip)
+                                {
+                                    timer_commands.write(command);
+                                }
                                 appearance_changed.write_default();
                                 break;
                             }
@@ -655,22 +659,6 @@ mod tests {
     }
 
     #[test]
-    fn shape_change_requests_restart_and_flip() {
-        let mut pending_flip = PendingFlip(false);
-
-        let command = shape_change_command(&mut pending_flip);
-
-        assert_eq!(command, TimerCommand::Restart);
-        assert!(pending_flip.0);
-    }
-
-    #[test]
-    #[cfg(feature = "chrome_extension")]
-    fn shape_preview_row_immediately_follows_color_row() {
-        assert_eq!(shape_preview_center_y(), 58.0);
-    }
-
-    #[test]
     fn mini_shape_sand_ignores_selected_color() {
         let mut app = App::new();
         app.insert_resource(HourglassConfig {
@@ -703,6 +691,33 @@ mod tests {
         let sand_state = query.single(app.world()).unwrap();
         assert_eq!(sand_state.sand_config.color, SAND_COLOR);
         assert!(sand_state.needs_update);
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn extension_shape_row_converts_physical_center_to_logical_viewport_position() {
+        let node = ComputedNode {
+            size: Vec2::new(440.0, 104.0),
+            inverse_scale_factor: 0.5,
+            ..default()
+        };
+        let transform = GlobalTransform::from_translation(Vec3::new(460.0, 164.0, 0.0));
+
+        assert_eq!(
+            extension_shape_row_screen_position(&node, &transform),
+            Some(Vec2::new(230.0, 82.0))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn extension_shape_row_waits_for_non_empty_layout() {
+        let transform = GlobalTransform::from_translation(Vec3::new(460.0, 164.0, 0.0));
+
+        assert_eq!(
+            extension_shape_row_screen_position(&ComputedNode::default(), &transform),
+            None
+        );
     }
 
     // --- shape_button_scale -----------------------------------------------

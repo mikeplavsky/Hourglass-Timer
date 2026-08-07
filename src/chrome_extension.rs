@@ -373,12 +373,12 @@ fn snapshot_from_resources(
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(test, target_arch = "wasm32"))]
 fn timer_status(timer_state: &TimerState) -> ExtensionTimerStatus {
-    if timer_state.is_running {
-        ExtensionTimerStatus::Running
-    } else if timer_state.remaining <= 0.0 {
+    if timer_state.remaining <= 0.0 {
         ExtensionTimerStatus::Finished
+    } else if timer_state.is_running {
+        ExtensionTimerStatus::Running
     } else if timer_state.remaining >= timer_state.duration {
         ExtensionTimerStatus::Idle
     } else {
@@ -398,20 +398,20 @@ fn apply_snapshot(
         return false;
     }
 
-    let has_usable_duration = snapshot.duration_ms.is_finite() && snapshot.duration_ms > 0.0;
-    let duration_ms = if has_usable_duration {
+    let has_valid_duration = snapshot.duration_ms.is_finite() && snapshot.duration_ms >= 0.0;
+    let duration_ms = if has_valid_duration {
         finite_clamp(snapshot.duration_ms, 0.0, MAX_DURATION_MS)
     } else {
         f64::from(TimerState::default().duration) * 1000.0
     };
-    let stored_remaining_ms = if has_usable_duration {
+    let stored_remaining_ms = if has_valid_duration {
         finite_clamp(snapshot.remaining_ms, 0.0, duration_ms)
     } else {
         duration_ms
     };
     let mut resolved_deadline = snapshot.deadline_ms.filter(|value| value.is_finite());
 
-    let (remaining_ms, is_running) = if !has_usable_duration {
+    let (remaining_ms, is_running) = if !has_valid_duration {
         resolved_deadline = None;
         (duration_ms, false)
     } else {
@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_duration_restore_recovers_three_minute_default() {
+    fn zero_duration_restore_is_preserved() {
         let mut value = snapshot(ExtensionTimerStatus::Finished, None);
         value.duration_ms = 0.0;
         value.remaining_ms = 0.0;
@@ -559,10 +559,22 @@ mod tests {
             &mut deadline,
             &mut config,
         ));
-        assert_eq!(timer.duration, 180.0);
-        assert_eq!(timer.remaining, 180.0);
+        assert_eq!(timer.duration, 0.0);
+        assert_eq!(timer.remaining, 0.0);
         assert!(!timer.is_running);
         assert_eq!(deadline.0, None);
+    }
+
+    #[test]
+    fn zero_remaining_serializes_as_finished_even_if_running_is_inconsistent() {
+        assert_eq!(
+            timer_status(&TimerState {
+                duration: 0.0,
+                remaining: 0.0,
+                is_running: true,
+            }),
+            ExtensionTimerStatus::Finished
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::resources::{
     AppearanceStateChanged, COLOR_PALETTE, ColorMode, HourglassConfig, PendingFlip,
 };
 use crate::timer::{TimerCommand, TimerSystems};
-use crate::ui::ColorRowMarker;
+use crate::ui::{ColorRowMarker, extension_appearance_change_command};
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -206,10 +206,10 @@ fn handle_color_button_clicks(
             Interaction::Pressed => {
                 config.color = color_button.color;
                 config.color_mode = ColorMode::Static;
-                // Changing the color starts the countdown over from full and flips
-                timer_commands.write(TimerCommand::Restart);
+                if let Some(command) = extension_appearance_change_command(&mut pending_flip) {
+                    timer_commands.write(command);
+                }
                 appearance_changed.write_default();
-                pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {
@@ -271,10 +271,10 @@ fn handle_random_color_button(
                 let new_color = pick_distinct_color(current, MIN_COLOR_DIST_SQ, &mut rng);
                 config.color = new_color.into();
                 config.color_mode = ColorMode::Random;
-                // Changing the color starts the countdown over from full and flips
-                timer_commands.write(TimerCommand::Restart);
+                if let Some(command) = extension_appearance_change_command(&mut pending_flip) {
+                    timer_commands.write(command);
+                }
                 appearance_changed.write_default();
-                pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {
@@ -301,11 +301,10 @@ fn handle_rainbow_color_button(
         match *interaction {
             Interaction::Pressed => {
                 config.color_mode = ColorMode::Rainbow;
-                // Activating rainbow starts the countdown over from full and flips
-                // (the continuous cycling in update_rainbow_color does not restart it)
-                timer_commands.write(TimerCommand::Restart);
+                if let Some(command) = extension_appearance_change_command(&mut pending_flip) {
+                    timer_commands.write(command);
+                }
                 appearance_changed.write_default();
-                pending_flip.0 = true;
                 *border_color = BorderColor(Color::srgb(0.0, 1.0, 0.0));
             }
             Interaction::Hovered => {

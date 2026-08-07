@@ -15,9 +15,9 @@ Implements the color row at the top of the screen: 8 fixed swatches, a random-co
 | System | Schedule | Role |
 |--------|----------|------|
 | `spawn_color_buttons` | `PostStartup` | Build swatches + random + rainbow buttons under `ColorRowMarker`. |
-| `handle_color_button_clicks` | `Update` | Static swatch → set color, mode `Static`, restart timer, request flip. |
-| `handle_random_color_button` | `Update` | Pick a distinct random color, mode `Random`, restart timer, request flip. |
-| `handle_rainbow_color_button` | `Update` | Mode `Rainbow`, restart timer, request flip. |
+| `handle_color_button_clicks` | `Update` | Static swatch → set color and mode `Static`; extension also restarts and requests a flip. |
+| `handle_random_color_button` | `Update` | Pick a distinct random color and mode `Random`; extension also restarts and requests a flip. |
+| `handle_rainbow_color_button` | `Update` | Set mode `Rainbow`; extension also restarts and requests a flip. |
 | `update_rainbow_color` | `Update` | While in `Rainbow`, advance the hue each frame. |
 
 ## The three color modes
@@ -37,7 +37,7 @@ Implements the color row at the top of the screen: 8 fixed swatches, a random-co
 
 ## Side effects: restart the timer and flip
 
-The three click handlers (`handle_color_button_clicks`, `handle_random_color_button`, `handle_rainbow_color_button`) all do three things: `timer_state.reset()`, set `is_running = true`, and set `pending_flip.0 = true`. So **changing color restarts the countdown from full, starts it, and flips the hourglass.** The restart is intentional (git history: "Restart the timer when the hourglass color changes"); the flip is the newer addition (git history: "Flip the hourglass when its color or shape changes"). The flip itself can't happen here — the color change rebuilds the hourglass entity, so the request is handed to [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] via `PendingFlip`. Note `update_rainbow_color`'s per-frame hue updates do *not* restart or flip — only the initial button press does. This is documented in code comments.
+On the Chrome extension target, the three click handlers restart the countdown from full, start it, and set `pending_flip.0 = true`. The flip itself can't happen inline because the color change rebuilds the hourglass entity, so the request is handed to [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]]. Native and ordinary web builds only change the color/mode. `update_rainbow_color`'s per-frame hue updates never restart or flip; only the initial extension button press does.
 
 ## Features Supported
 

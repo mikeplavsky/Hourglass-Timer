@@ -3,7 +3,8 @@ pub mod pause_overlay;
 pub mod shape_panel;
 pub mod timer_panel;
 
-use crate::resources::AppearanceStateChanged;
+use crate::resources::{AppearanceStateChanged, PendingFlip};
+use crate::timer::TimerCommand;
 use bevy::prelude::*;
 
 pub struct UIPlugin;
@@ -14,6 +15,17 @@ pub(crate) const SIDEBAR_APPEARANCE_PADDING: f32 = 4.0;
 pub(crate) const SIDEBAR_COLOR_ROW_HEIGHT: f32 = 28.0;
 #[cfg(feature = "chrome_extension")]
 pub(crate) const SIDEBAR_SHAPE_ROW_HEIGHT: f32 = 52.0;
+
+pub(crate) fn extension_appearance_change_command(
+    pending_flip: &mut PendingFlip,
+) -> Option<TimerCommand> {
+    if cfg!(feature = "chrome_extension") {
+        pending_flip.0 = true;
+        Some(TimerCommand::Restart)
+    } else {
+        None
+    }
+}
 
 // Marker components for UI panels
 #[derive(Component)]
@@ -111,7 +123,7 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                                 ColorRowMarker,
                                 Node {
                                     width: Val::Percent(100.0),
-                                    height: Val::Px(SIDEBAR_COLOR_ROW_HEIGHT),
+                                    min_height: Val::Px(SIDEBAR_COLOR_ROW_HEIGHT),
                                     display: Display::Flex,
                                     flex_direction: FlexDirection::Row,
                                     flex_wrap: FlexWrap::Wrap,
@@ -119,7 +131,7 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                                     align_items: AlignItems::Center,
                                     justify_content: JustifyContent::Center,
                                     padding: UiRect::all(Val::Px(3.0)),
-                                    overflow: Overflow::clip(),
+                                    row_gap: Val::Px(2.0),
                                     ..default()
                                 },
                             ));
@@ -194,6 +206,40 @@ mod tests {
                 .iter(world)
                 .all(|name| name.as_str() != "Appearance Toggle")
         );
+    }
+
+    #[test]
+    fn sidebar_color_row_can_grow_when_controls_wrap() {
+        let mut app = App::new();
+        app.add_systems(Startup, setup_sidebar_ui_layout);
+        app.update();
+
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<&Node, With<ColorRowMarker>>();
+        let row = query.single(world).unwrap();
+        assert_eq!(row.height, Val::Auto);
+        assert_eq!(row.min_height, Val::Px(SIDEBAR_COLOR_ROW_HEIGHT));
+        assert_eq!(row.flex_wrap, FlexWrap::Wrap);
+        assert_eq!(row.overflow, Overflow::visible());
+    }
+}
+
+#[cfg(test)]
+mod appearance_change_tests {
+    use super::*;
+
+    #[test]
+    fn appearance_restart_and_flip_are_extension_only() {
+        let mut pending_flip = PendingFlip(false);
+        let command = extension_appearance_change_command(&mut pending_flip);
+
+        if cfg!(feature = "chrome_extension") {
+            assert_eq!(command, Some(TimerCommand::Restart));
+            assert!(pending_flip.0);
+        } else {
+            assert_eq!(command, None);
+            assert!(!pending_flip.0);
+        }
     }
 }
 

@@ -11,7 +11,7 @@ Lets the user recolor the hourglass sand three ways: pick one of 8 fixed **swatc
 1. User clicks a **swatch** → sand turns that color (static).
 2. Or clicks the **`?`-with-squares** button → sand turns a random, noticeably-different color.
 3. Or clicks the **rainbow stripes** button → sand continuously cycles through the spectrum.
-4. In every case, the countdown **restarts from full, starts running, and the hourglass flips**.
+4. In the Chrome extension, the countdown **restarts from full, starts running, and the hourglass flips**. Native and ordinary web builds only change appearance.
 
 ## Implementation
 
@@ -39,7 +39,7 @@ There are two paths, which is a subtle part of the design:
 
 ## Side effects: restarts the timer and flips
 
-All three color buttons call `timer_state.reset()`, start the timer, and set `PendingFlip`. **Picking a color restarts the countdown and flips the hourglass.** This is intentional and documented in code comments; the continuous rainbow hue updates do *not* restart or flip — only the button press does. The flip is queued (not applied at the click) because the color change rebuilds the hourglass entity — see [[features/hourglass-interaction#Flip on color/shape change]] and [[modules/hourglass#Flip-on-change orchestration]].
+With `chrome_extension` enabled, all three color buttons restart the timer and set `PendingFlip`; picking a color therefore restarts the countdown and flips the hourglass. Native and ordinary web builds preserve their original appearance-only behavior. Continuous rainbow hue updates never restart or flip. The extension flip is queued because the color change rebuilds the entity — see [[features/hourglass-interaction#Flip on color/shape change]] and [[modules/hourglass#Flip-on-change orchestration]].
 
 ## Architecture Decisions
 

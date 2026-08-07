@@ -47,7 +47,7 @@ pub struct TimerState {
 pub struct PendingFlip(pub bool);
 ```
 
-A one-bit signal resource (`Default` is `false`). The color/shape click handlers set it to `true` to **request a flip on the next (re)built hourglass**; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] consumes it. It exists because a color/shape change despawns and rebuilds the hourglass entity, so the flip can't be applied inline at the click site — it has to wait for the fresh entity. See [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
+A one-bit signal resource (`Default` is `false`). Chrome-extension color/shape handlers set it to `true` to **request a flip on the next (re)built hourglass**; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] consumes it. Native and ordinary web appearance changes leave it false. It exists because a color/shape change rebuilds the entity, so the extension flip must wait for the fresh entity.
 
 ### Enums
 

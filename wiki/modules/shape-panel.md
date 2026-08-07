@@ -17,9 +17,9 @@ Implements the shape selector row: four clickable **mini-hourglasses** (one per 
 | `spawn_shape_buttons` | `PostStartup` | Build 4 mini-hourglasses (Classic/Modern/Slim/Wide). |
 | `spawn_random_shape_button` | `PostStartup` | Build the `?` sprite button. |
 | `spawn_morphing_button` | `PostStartup` | Build the `∞` sprite button. |
-| `handle_shape_button_clicks` | `Update` | Click a mini → set `shape_type`, mode `Static`, restart timer, request flip. |
-| `handle_random_shape_button_clicks` | `Update` | Click `?` → pick a distinct random shape, restart timer, request flip. |
-| `handle_morphing_button_clicks` | `Update` | Click `∞` → toggle `ShapeMode::Morphing` (no restart, no flip). |
+| `handle_shape_button_clicks` | `Update` | Click a mini → set `shape_type`, mode `Static`; extension target also restarts and requests a flip. |
+| `handle_random_shape_button_clicks` | `Update` | Click `?` → pick a distinct random shape; extension target also restarts and requests a flip. |
+| `handle_morphing_button_clicks` | `Update` | Click `∞` → toggle `ShapeMode::Morphing`; extension target also restarts and requests a flip. |
 | `update_mini_hourglass_colors` | `Update` | Keep mini sand color in sync with config. |
 | `handle_hover_effects` | `Update` | Tag the hovered sprite with `HoveredHourglass`. |
 | `update_hourglass_layering` | `Update` | Scale sprites: 1.3 hovered, 1.15 selected, 1.0 default. |
@@ -35,7 +35,7 @@ Implements the shape selector row: four clickable **mini-hourglasses** (one per 
 
 ## How the sprites are built and positioned
 
-`spawn_shape_buttons` builds each mini via `HourglassMeshBuilder` with `get_mini_shape_config` (25 px presets from [[modules/hourglass#Shape presets]]), filled to 70% for visual appeal, then **removes the `Hourglass` component** so they're static displays, not live timers. They're spawned at a temporary position; `update_mini_hourglass_positions` then anchors them each frame to the world-space projection of the shape-row UI node (center x ± `original_x`, fixed screen y ≈ 60, z = 10). This keeps the world-space sprites visually aligned with the flexbox row across window resizes.
+`spawn_shape_buttons` builds each mini via `HourglassMeshBuilder` with `get_mini_shape_config` (25 px presets from [[modules/hourglass#Shape presets]]), filled to 70% for visual appeal, then **removes the `Hourglass` component** so they're static displays, not live timers. They're spawned at a temporary position; in the extension, `update_mini_hourglass_positions` converts the shape-row UI node's physical-pixel center to logical viewport coordinates before projecting it into world space. That keeps the row aligned at Retina scale and browser zoom while allowing wrapped color controls to move the shape row instead of overlapping or clipping it. Native/web retain their existing fixed row position.
 
 The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` glyph. They use an **embedded font** (`FiraSans-Regular.ttf`, bundled via `embedded_asset!`) because Bevy's default font is an ASCII-only subset that can't render `∞`. See [[patterns#Embedded font for non-ASCII glyphs]].
 
@@ -45,7 +45,7 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 
 ## Side effects: restart the timer and flip
 
-`handle_shape_button_clicks` and `handle_random_shape_button_clicks` both `reset()` + start the timer **and** set `pending_flip.0 = true` — selecting a shape restarts the countdown and flips the hourglass (git history: "restart timer on shape change", then "Flip the hourglass when its color or shape changes"). The flip is queued rather than applied inline because the shape change rebuilds the entity; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] flips the rebuilt one. `handle_morphing_button_clicks` only toggles the mode and does **not** restart or flip. `pick_distinct_shape` re-rolls until it returns a shape different from the current one.
+On the Chrome extension target, all three shape actions—preset, random, and morphing toggle—restart from the configured duration and set `pending_flip.0 = true`. The flip is queued because the shape change rebuilds the entity; [[modules/hourglass#Flip-on-change orchestration|`apply_pending_flip`]] flips the rebuilt one. Native and ordinary web builds only change the selected shape/mode, preserving their pre-extension timer behavior. `pick_distinct_shape` re-rolls until it returns a shape different from the current one.
 
 ## Features Supported
 
@@ -61,7 +61,7 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 
 ## Tests
 
-6 unit tests. `pick_distinct_shape` (always differs from current, returns a valid variant, deterministic per seed) and `shape_button_scale` (hover beats selection → 1.3, selected → 1.15, else 1.0). The hover/click *systems* call `viewport_to_world_2d`, which can't run in a headless `App`, so their hit-test geometry is extracted into `within_click_radius` (tested over in [[modules/hourglass]]) rather than exercised through the system; spawning/positioning remain manual-only. See [[references/test-coverage#shape_panel.rs]].
+7 regular tests, plus two extension-only layout tests. They cover `pick_distinct_shape`, `shape_button_scale`, the fixed mini-preview sand color, physical-to-logical coordinate conversion, and waiting for a non-empty computed layout. The hover/click *systems* call `viewport_to_world_2d`, so their hit-test geometry is extracted into `within_click_radius` (tested in [[modules/hourglass]]) rather than exercised headlessly. See [[references/test-coverage#shape_panel.rs]].
 
 ## Related Pages
 

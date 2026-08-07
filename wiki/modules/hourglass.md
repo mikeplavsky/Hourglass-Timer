@@ -56,11 +56,11 @@ The visual and interactive heart of the app. This module owns the *main* hourgla
 
 ## Flip-on-change orchestration
 
-A color or shape change doesn't just rebuild the hourglass — it also **flips** it (so the sand visibly resets to the top). But the flip can't be issued at the click site: the rebuild despawns the current entity, so a flip applied there would land on the about-to-die entity and, worse, set its `flipping` flag — which the rebuild guard reads as "don't interrupt a flip," silently dropping the color/shape change entirely. The flip has to land on the *new* entity, one frame later.
+In the Chrome extension, a color or shape change doesn't just rebuild the hourglass — it also **flips** it so the sand visibly resets to the top. That flip can't be issued at the click site: the rebuild despawns the current entity, so it has to land on the *new* entity one frame later. Native and ordinary web builds do not request this flip.
 
 The three-step handshake, mediated by the [[modules/resources#PendingFlip|`PendingFlip`]] resource:
 
-1. **Request** — the [[modules/color-panel]] / [[modules/shape-panel]] click handlers set `pending_flip.0 = true` (alongside `timer_state.reset()` + start).
+1. **Request** — extension-target [[modules/color-panel]] / [[modules/shape-panel]] handlers set `pending_flip.0 = true` alongside `TimerCommand::Restart`.
 2. **Rebuild** — `update_hourglass_shape` / `update_morphing_shape` despawn the old entity and spawn the replacement that same tick.
 3. **Apply** — `apply_pending_flip` runs (ordered `.before(update_hourglass_shape).before(update_morphing_shape)`) and flips the fresh entity via an `Added<MainHourglass>` query, which only matches the new entity the frame *after* the rebuild command flushes. It mirrors the drag-flip: snap `upper_chamber = 0.0` / `lower_chamber = 1.0` so the crate's end-of-flip chamber swap leaves the top full, then `flip()`. The flag is cleared **only once the flip actually fires** (guarded by `can_flip()`), so a request made while a prior flip was still blocking the rebuild survives to the real respawn.
 

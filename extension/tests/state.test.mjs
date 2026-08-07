@@ -111,14 +111,26 @@ test("invalid snapshots fall back to safe defaults", () => {
   assert.deepEqual(result, defaultState());
 });
 
-test("zero-duration snapshots recover to the three-minute default", () => {
+test("zero-duration snapshots are preserved", () => {
   const result = normalizeState({
     ...defaultState(),
     durationMs: 0,
     remainingMs: 0,
     status: "finished"
   });
-  assert.equal(result.durationMs, 180_000);
-  assert.equal(result.remainingMs, 180_000);
-  assert.equal(result.status, "idle");
+  assert.equal(result.durationMs, 0);
+  assert.equal(result.remainingMs, 0);
+  assert.equal(result.status, "finished");
+});
+
+test("coercible non-number durations fall back to the safe default", () => {
+  for (const durationMs of [null, "", false, "0"]) {
+    const result = normalizeState({
+      ...defaultState(),
+      durationMs,
+      remainingMs: 0,
+      status: "finished"
+    });
+    assert.deepEqual(result, defaultState());
+  }
 });

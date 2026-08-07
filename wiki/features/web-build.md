@@ -33,7 +33,7 @@ The window is configured with `fit_canvas_to_parent: true` in [[modules/app|`App
 
 ## Architecture Decisions
 
-- **One codebase, two feature sets** — no `#[cfg]` branching in the app logic; the difference is entirely in `Cargo.toml` feature selection and build flags.
+- **One codebase, three targets** — this page describes the ordinary WASM build. The `chrome_extension` feature adds a separate WASM side-panel target with extension-only bridge, layout, and lifecycle code.
 - **`getrandom` js backend** is required because the [[modules/color-panel|random color]] / [[modules/shape-panel|random shape]] features use `rand`, which needs a browser entropy source on WASM.
 
 ## Open Questions

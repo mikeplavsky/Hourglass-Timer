@@ -1,10 +1,10 @@
-<!-- wiki:sources: src/main.rs, src/resources.rs, src/timer.rs, src/hourglass.rs, src/ui/mod.rs, Cargo.toml -->
+<!-- wiki:sources: src/main.rs, src/resources.rs, src/timer.rs, src/hourglass.rs, src/ui/mod.rs, src/chrome_extension.rs, extension/panel-connection.mjs, extension/sidepanel.mjs, extension/service-worker.mjs, extension/state.mjs, Cargo.toml -->
 
 # Architecture Overview
 
 ## System Context
 
-Hourglass Timer is a single-screen desktop/web application built on the [Bevy](https://bevyengine.org/) game engine (v0.16, an ECS framework). It renders an interactive countdown as a visual hourglass via the [`bevy_hourglass`](https://crates.io/crates/bevy_hourglass) crate. The same source compiles to a **native** binary and to **WebAssembly** ([[features/web-build]]); the live deployment is the WASM build. There is no backend, no persistence, and no networking — it is entirely client-side.
+Hourglass Timer is a single-screen application built on the [Bevy](https://bevyengine.org/) game engine (v0.16, an ECS framework). It renders an interactive countdown as a visual hourglass via the [`bevy_hourglass`](https://crates.io/crates/bevy_hourglass) crate. The same source compiles to a **native** binary, an ordinary **WebAssembly** site ([[features/web-build]]), and a Manifest V3 **Chrome Side Panel extension**. There is no remote backend or host-page access. The extension adds a local service worker, `chrome.storage`, and Chrome alarms for synchronization while panels are open; closing the last panel clears that state so the next session starts from the three-minute default.
 
 ## Component Diagram
 
@@ -33,6 +33,15 @@ graph TD
         Pause["PauseOverlay"]
     end
 
+    subgraph ChromeExt["Chrome extension target"]
+        Loader["sidepanel.mjs<br/>(WASM loader)"]
+        Port["panel-connection.mjs<br/>(Port RPC + heartbeat)"]
+        Bridge["ChromeExtensionPlugin<br/>(snapshot bridge)"]
+        Worker["service-worker.mjs<br/>(state queue + lifecycle)"]
+        Storage["chrome.storage.local"]
+        Alarm["chrome.alarms + notifications"]
+    end
+
     Ext["bevy_hourglass<br/>(Hourglass, MeshBuilder, SandSplash)"]
 
     App --> Plugins
@@ -41,23 +50,30 @@ graph TD
     Timer -->|writes| TS
     TPanel -->|reads/writes| TS
     Color -->|writes| Cfg
-    Color -->|resets| TS
-    Color -->|requests flip| PF
+    Color -->|extension: restarts| TS
+    Color -->|extension: requests flip| PF
     Shape -->|writes| Cfg
-    Shape -->|resets| TS
-    Shape -->|requests flip| PF
+    Shape -->|extension: restarts| TS
+    Shape -->|extension: requests flip| PF
     HG -->|reads| Cfg
     HG -->|reads/writes| TS
     HG -->|consumes| PF
     Pause -->|reads| TS
     HG --> Ext
     Shape --> Ext
+    Loader --> Port
+    Port <-->|long-lived Port messages| Worker
+    Loader <-->|custom events| Bridge
+    Bridge <-->|reads/writes| Resources
+    Worker --> Storage
+    Worker --> Alarm
 ```
 
 ## Targets / Build Artifacts
 
 - **Native** — `cargo run` / `cargo build`, default `dev_native` feature (dynamic linking, hot reload, Wayland). Release uses thin LTO.
 - **Web (WASM)** — `./build_wasm.sh` → `cargo build --target wasm32-unknown-unknown --no-default-features` + `wasm-bindgen`, output to `wasm/`. Minimal Bevy feature set + `getrandom` js backend. See [[features/web-build]].
+- **Chrome extension (WASM)** — `./build_extension.sh` builds with `--features chrome_extension`, runs `wasm-bindgen`/`wasm-opt`, and packages the local WASM, JavaScript, manifest, service worker, and icons in `dist/chrome-extension/` plus a ZIP.
 
 ## Component Map
 
@@ -72,16 +88,21 @@ graph TD
 | [[modules/shape-panel]] | [[src/ui/shape_panel.rs\|src/ui/shape_panel.rs]] | Shape + morph controls. |
 | [[modules/timer-panel]] | [[src/ui/timer_panel.rs\|src/ui/timer_panel.rs]] | Duration + playback controls. |
 | [[modules/pause-overlay]] | [[src/ui/pause_overlay.rs\|src/ui/pause_overlay.rs]] | "PAUSED" banner. |
+| Extension bridge | [[src/chrome_extension.rs\|src/chrome_extension.rs]] | Versioned snapshots, wall-clock deadlines, and Bevy/JavaScript events. |
+| Side-panel loader | `extension/sidepanel.mjs` | Restores state before Bevy starts and synchronizes panel changes. |
+| Panel connection | `extension/panel-connection.mjs` | Sends state RPCs and periodic heartbeats over a reconnecting long-lived Port. |
+| Extension worker | `extension/service-worker.mjs` | Serializes state changes, owns alarms/notifications, tracks live panels, and clears state after the last close. |
 
 ## Key Design Decisions
 
 - **Resource-mediated, plugin-decoupled architecture** — plugins never call each other; they communicate only by reading/writing the `HourglassConfig` and `TimerState` resources. This is idiomatic Bevy ECS and keeps each plugin independently understandable. Supports every feature. See [[patterns#Resource-mediated communication]].
 - **Logic/visual split for the timer** — the countdown ([[modules/timer]]) mutates only state; a separate system mirrors state into the `Hourglass` ([[modules/hourglass]]). Enables [[features/countdown-timer]] to be unit-tested. See [[flows/countdown-tick]].
 - **Recreate-on-change rendering** — shape/color changes despawn and rebuild the hourglass because `bevy_hourglass` builds meshes from config. Drives [[features/shape-selection]], [[features/shape-morphing]], [[features/color-selection]]. See [[flows/appearance-recreation]] and [[patterns#Recreate-on-change rendering]].
-- **Deferred flip via `PendingFlip`** — because the rebuild despawns the entity, a color/shape change can't flip it inline; it sets a one-shot `PendingFlip` resource that `apply_pending_flip` applies to the rebuilt entity next frame. A signal resource (not a direct call) keeps the panels decoupled from the hourglass. See [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
+- **Extension-only appearance restart/flip** — Chrome side-panel color and shape choices restart the timer and set a one-shot `PendingFlip` that `apply_pending_flip` applies to the rebuilt entity next frame. Native and ordinary web targets retain their original appearance-only behavior.
 - **Pure helpers extracted from systems** — arithmetic-heavy logic is pulled into free functions so it's testable without a Bevy `App`. See [[references/test-coverage]] and [[patterns#Pure helpers extracted from systems]].
 - **Dual UI model** — Bevy UI nodes for the color row / timer panel; world-space sprites for the shape selectors (so they can be real mini-hourglasses). See [[patterns#Dual UI: nodes vs. world sprites]].
-- **One codebase, two feature sets** — native vs. web differ only in `Cargo.toml` feature selection, not in app code. See [[features/web-build]].
+- **One codebase, three targets** — native and ordinary web share the default application behavior; `chrome_extension` adds responsive sidebar layout, lifecycle synchronization, and extension-only appearance semantics.
+- **Live-panel Port protocol** — each side panel sends state requests and 20-second heartbeats over a long-lived runtime Port. This keeps Manifest V3 worker bookkeeping alive while the panel is open and reconnects the panel if Chrome replaces the worker.
 
 ## External Dependencies
 
@@ -92,6 +113,8 @@ graph TD
 | `rand` 0.8 | Random color/shape selection. |
 | `approx` (dev) | Float comparisons in tests. |
 | `getrandom` (wasm) | Browser entropy for `rand` on WASM. |
+| `serde` / `serde_json` (extension) | Versioned state snapshots shared with JavaScript. |
+| `wasm-bindgen`, `js-sys`, `web-sys` (extension) | Browser custom-event and wall-clock bridge. |
 
 ## Related Pages
 

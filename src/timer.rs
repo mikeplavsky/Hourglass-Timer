@@ -76,13 +76,15 @@ fn apply_timer_command(timer_state: &mut TimerState, command: TimerCommand) -> b
     let previous = timer_state.clone();
 
     match command {
-        TimerCommand::Start => timer_state.is_running = true,
+        TimerCommand::Start => timer_state.is_running = timer_state.remaining > 0.0,
         TimerCommand::Pause => timer_state.is_running = false,
-        TimerCommand::Toggle => timer_state.is_running = !timer_state.is_running,
+        TimerCommand::Toggle => {
+            timer_state.is_running = !timer_state.is_running && timer_state.remaining > 0.0;
+        }
         TimerCommand::Reset => timer_state.reset(),
         TimerCommand::Restart => {
             timer_state.reset();
-            timer_state.is_running = true;
+            timer_state.is_running = timer_state.remaining > 0.0;
         }
         TimerCommand::Adjust(seconds) => timer_state.add_time(seconds),
         TimerCommand::Finish => {
@@ -169,6 +171,20 @@ mod tests {
     fn no_op_command_does_not_report_change() {
         let mut timer = state(180.0, 180.0, false);
         assert!(!apply_timer_command(&mut timer, TimerCommand::Pause));
+    }
+
+    #[test]
+    fn zero_duration_cannot_be_started_toggled_or_restarted() {
+        for command in [
+            TimerCommand::Start,
+            TimerCommand::Toggle,
+            TimerCommand::Restart,
+        ] {
+            let mut timer = state(0.0, 0.0, false);
+            apply_timer_command(&mut timer, command);
+            assert_eq!(timer.remaining, 0.0);
+            assert!(!timer.is_running, "{command:?} started a zero timer");
+        }
     }
 
     #[test]
