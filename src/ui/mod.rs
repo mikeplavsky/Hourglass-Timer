@@ -22,9 +22,6 @@ pub struct ShapeRowMarker;
 pub struct BottomTimerMarker;
 
 #[derive(Component)]
-struct AppearanceToggleButton;
-
-#[derive(Component)]
 struct AppearanceControlsContainer;
 
 // Resource to track timer panel visibility
@@ -36,7 +33,7 @@ pub struct AppearancePanelVisible(pub bool);
 
 impl Default for AppearancePanelVisible {
     fn default() -> Self {
-        Self(!cfg!(feature = "chrome_extension"))
+        Self(true)
     }
 }
 
@@ -57,11 +54,6 @@ impl Plugin for UIPlugin {
 
         #[cfg(not(feature = "chrome_extension"))]
         app.add_systems(Startup, setup_ui_layout);
-
-        app.add_systems(
-            Update,
-            (handle_appearance_toggle, update_appearance_visibility),
-        );
     }
 }
 
@@ -96,38 +88,11 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                 .with_children(|parent| {
                     parent
                         .spawn((
-                            Name::new("Appearance Toggle"),
-                            AppearanceToggleButton,
-                            Button,
-                            Node {
-                                width: Val::Px(150.0),
-                                height: Val::Px(30.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.25, 0.25, 0.25)),
-                            BorderColor(Color::srgb(0.65, 0.65, 0.65)),
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                Text::new("Appearance"),
-                                TextFont {
-                                    font_size: 14.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-                        });
-
-                    parent
-                        .spawn((
                             Name::new("Appearance Controls"),
                             AppearanceControlsContainer,
                             Node {
                                 width: Val::Percent(100.0),
-                                display: Display::None,
+                                display: Display::Flex,
                                 flex_direction: FlexDirection::Column,
                                 align_items: AlignItems::Center,
                                 ..default()
@@ -204,44 +169,24 @@ mod tests {
         let mut query = world.query_filtered::<&BackgroundColor, With<BottomTimerMarker>>();
         assert_eq!(query.single(world).unwrap().0, Color::NONE);
     }
-}
 
-fn handle_appearance_toggle(
-    mut query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<AppearanceToggleButton>),
-    >,
-    mut visible: ResMut<AppearancePanelVisible>,
-) {
-    for (interaction, mut background) in &mut query {
-        match *interaction {
-            Interaction::Pressed => {
-                visible.0 = !visible.0;
-                *background = BackgroundColor(Color::srgb(0.45, 0.45, 0.45));
-            }
-            Interaction::Hovered => {
-                *background = BackgroundColor(Color::srgb(0.35, 0.35, 0.35));
-            }
-            Interaction::None => {
-                *background = BackgroundColor(Color::srgb(0.25, 0.25, 0.25));
-            }
-        }
-    }
-}
+    #[test]
+    fn sidebar_appearance_controls_are_always_visible_without_toggle() {
+        let mut app = App::new();
+        app.add_systems(Startup, setup_sidebar_ui_layout);
+        app.update();
 
-fn update_appearance_visibility(
-    visible: Res<AppearancePanelVisible>,
-    mut query: Query<&mut Node, With<AppearanceControlsContainer>>,
-) {
-    if !visible.is_changed() {
-        return;
-    }
-    for mut node in &mut query {
-        node.display = if visible.0 {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        assert!(AppearancePanelVisible::default().0);
+        let world = app.world_mut();
+        let mut controls_query = world.query_filtered::<&Node, With<AppearanceControlsContainer>>();
+        assert_eq!(controls_query.single(world).unwrap().display, Display::Flex);
+
+        let mut names = world.query::<&Name>();
+        assert!(
+            names
+                .iter(world)
+                .all(|name| name.as_str() != "Appearance Toggle")
+        );
     }
 }
 
