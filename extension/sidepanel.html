@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hourglass Timer</title>
+    <link rel="stylesheet" href="sidepanel.css">
+  </head>
+  <body>
+    <canvas id="hourglass-canvas" aria-label="Hourglass Timer"></canvas>
+    <div id="loading" role="status">Loading Hourglass Timer…</div>
+    <div id="error" role="alert" hidden>
+      <strong>Hourglass Timer could not start.</strong>
+      <span id="error-detail">Reload the extension and try again.</span>
+    </div>
+    <script type="module" src="sidepanel.mjs"></script>
+  </body>
+</html>

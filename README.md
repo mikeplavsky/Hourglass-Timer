@@ -38,6 +38,15 @@ An interactive hourglass timer built with Rust and the [Bevy game engine](https:
 3. **Open in browser**:
    Navigate to `http://localhost:8080`
 
+### Chrome Side Panel Extension
+
+1. Install the build prerequisites: `wasm-bindgen`, Binaryen (`wasm-opt`), and `zip`.
+2. Run `./build_extension.sh`.
+3. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist/chrome-extension`.
+4. Click the Hourglass Timer toolbar icon to open the side panel.
+
+The build also creates `dist/hourglass-timer-extension.zip`. Timer state is retained only while a side panel is open. Closing the last panel clears the timer snapshot and completion alarm, so the next open starts stopped at three minutes with the default sand color and Classic shape. It does not request access to websites or tabs.
+
 ## How to Use
 
 1. **Set Your Time**:

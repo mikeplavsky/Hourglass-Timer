@@ -1,4 +1,5 @@
 use crate::resources::TimerState;
+use crate::timer::{TimerCommand, TimerSystems};
 use crate::ui::{BottomTimerMarker, TimerPanelVisible};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
@@ -7,17 +8,24 @@ pub struct TimerPanelPlugin;
 
 impl Plugin for TimerPanelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, spawn_timer_controls)
-            .add_systems(
-                Update,
-                (
-                    handle_timer_buttons,
-                    update_time_display,
-                    handle_control_buttons,
-                    handle_toggle_button,
-                    update_timer_panel_visibility,
-                ),
-            );
+        #[cfg(feature = "chrome_extension")]
+        app.add_systems(PostStartup, spawn_sidebar_timer_controls);
+
+        #[cfg(not(feature = "chrome_extension"))]
+        app.add_systems(PostStartup, spawn_timer_controls);
+
+        app.add_systems(
+            Update,
+            (handle_timer_buttons, handle_control_buttons).in_set(TimerSystems::Input),
+        )
+        .add_systems(
+            Update,
+            (
+                update_time_display.after(TimerSystems::Tick),
+                handle_toggle_button,
+                update_timer_panel_visibility,
+            ),
+        );
     }
 }
 
@@ -44,6 +52,202 @@ struct ToggleButton;
 #[derive(Component)]
 struct TimerControlsContainer;
 
+#[cfg(feature = "chrome_extension")]
+fn spawn_sidebar_timer_controls(
+    mut commands: Commands,
+    query: Query<Entity, With<BottomTimerMarker>>,
+) {
+    let Ok(panel_entity) = query.single() else {
+        return;
+    };
+
+    commands.entity(panel_entity).with_children(|parent| {
+        parent
+            .spawn((
+                ToggleButton,
+                Button,
+                Node {
+                    width: Val::Px(150.0),
+                    height: Val::Px(28.0),
+                    margin: UiRect::top(Val::Px(5.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                BorderColor(Color::srgb(0.65, 0.65, 0.65)),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Text::new("Adjust Time"),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ));
+            });
+
+        parent
+            .spawn((
+                TimerControlsContainer,
+                Node {
+                    width: Val::Percent(100.0),
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    padding: UiRect::vertical(Val::Px(5.0)),
+                    ..default()
+                },
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    TimeDisplay,
+                    Text::new("00:03:00"),
+                    TextFont {
+                        font_size: 34.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    Node {
+                        margin: UiRect::vertical(Val::Px(3.0)),
+                        ..default()
+                    },
+                ));
+
+                spawn_sidebar_playback_controls(parent);
+
+                spawn_sidebar_adjustment_row(
+                    parent,
+                    &[
+                        ("-1h", -3600.0),
+                        ("-15m", -900.0),
+                        ("-5m", -300.0),
+                        ("-1m", -60.0),
+                        ("-15s", -15.0),
+                        ("-5s", -5.0),
+                        ("-1s", -1.0),
+                    ],
+                );
+                spawn_sidebar_adjustment_row(
+                    parent,
+                    &[
+                        ("+1s", 1.0),
+                        ("+5s", 5.0),
+                        ("+15s", 15.0),
+                        ("+1m", 60.0),
+                        ("+5m", 300.0),
+                        ("+15m", 900.0),
+                        ("+1h", 3600.0),
+                    ],
+                );
+            });
+    });
+}
+
+#[cfg(feature = "chrome_extension")]
+fn spawn_sidebar_playback_controls(parent: &mut RelatedSpawnerCommands<ChildOf>) {
+    parent
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },))
+        .with_children(|parent| {
+            for (label, color, marker) in [
+                ("Start", Color::srgb(0.2, 0.7, 0.2), 0_u8),
+                ("Pause", Color::srgb(0.7, 0.7, 0.2), 1_u8),
+                ("Reset", Color::srgb(0.7, 0.2, 0.2), 2_u8),
+            ] {
+                let mut entity = parent.spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(68.0),
+                        height: Val::Px(36.0),
+                        margin: UiRect::horizontal(Val::Px(4.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(color),
+                    BorderColor(Color::WHITE),
+                ));
+                match marker {
+                    0 => {
+                        entity.insert(StartButton);
+                    }
+                    1 => {
+                        entity.insert(PauseButton);
+                    }
+                    _ => {
+                        entity.insert(ResetButton);
+                    }
+                }
+                entity.with_children(|parent| {
+                    parent.spawn((
+                        Text::new(label),
+                        TextFont {
+                            font_size: 15.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+            }
+        });
+}
+
+#[cfg(feature = "chrome_extension")]
+fn spawn_sidebar_adjustment_row(
+    parent: &mut RelatedSpawnerCommands<ChildOf>,
+    adjustments: &[(&str, f32); 7],
+) {
+    parent
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|parent| {
+            for &(label, adjustment) in adjustments {
+                parent
+                    .spawn((
+                        TimeAdjustButton { adjustment },
+                        Button,
+                        Node {
+                            height: Val::Px(32.0),
+                            flex_basis: Val::Px(0.0),
+                            flex_grow: 1.0,
+                            margin: UiRect::all(Val::Px(1.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                        BorderColor(Color::srgb(0.55, 0.55, 0.55)),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            Text::new(label),
+                            TextFont {
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                    });
+            }
+        });
+}
+
+#[cfg(not(feature = "chrome_extension"))]
 fn spawn_timer_controls(mut commands: Commands, query: Query<Entity, With<BottomTimerMarker>>) {
     // Find the bottom timer container
     if let Ok(panel_entity) = query.single() {
@@ -97,6 +301,7 @@ fn spawn_timer_controls(mut commands: Commands, query: Query<Entity, With<Bottom
     }
 }
 
+#[cfg(not(feature = "chrome_extension"))]
 fn spawn_timer_controls_content(parent: &mut RelatedSpawnerCommands<ChildOf>) {
     // Time controls row
     parent
@@ -311,12 +516,12 @@ fn handle_timer_buttons(
         (&Interaction, &TimeAdjustButton, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>),
     >,
-    mut timer_state: ResMut<TimerState>,
+    mut timer_commands: EventWriter<TimerCommand>,
 ) {
     for (interaction, button, mut bg_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
-                timer_state.add_time(button.adjustment);
+                timer_commands.write(TimerCommand::Adjust(button.adjustment));
                 *bg_color = BackgroundColor(Color::srgb(0.5, 0.5, 0.5));
             }
             Interaction::Hovered => {
@@ -357,15 +562,13 @@ fn handle_control_buttons(
             Without<PauseButton>,
         ),
     >,
-    mut timer_state: ResMut<TimerState>,
+    mut timer_commands: EventWriter<TimerCommand>,
 ) {
     // Handle Start button
     for (interaction, mut bg_color) in &mut start_query {
         match *interaction {
             Interaction::Pressed => {
-                if !timer_state.is_running {
-                    timer_state.is_running = true;
-                }
+                timer_commands.write(TimerCommand::Start);
                 *bg_color = BackgroundColor(Color::srgb(0.3, 0.8, 0.3));
             }
             Interaction::Hovered => {
@@ -381,7 +584,7 @@ fn handle_control_buttons(
     for (interaction, mut bg_color) in &mut pause_query {
         match *interaction {
             Interaction::Pressed => {
-                timer_state.is_running = false;
+                timer_commands.write(TimerCommand::Pause);
                 *bg_color = BackgroundColor(Color::srgb(0.8, 0.8, 0.3));
             }
             Interaction::Hovered => {
@@ -397,7 +600,7 @@ fn handle_control_buttons(
     for (interaction, mut bg_color) in &mut reset_query {
         match *interaction {
             Interaction::Pressed => {
-                timer_state.reset();
+                timer_commands.write(TimerCommand::Reset);
                 *bg_color = BackgroundColor(Color::srgb(0.8, 0.3, 0.3));
             }
             Interaction::Hovered => {
@@ -453,10 +656,268 @@ fn update_time_display(
     panel_visible: Res<TimerPanelVisible>,
     mut query: Query<&mut Text, With<TimeDisplay>>,
 ) {
-    // Only update time display if panel is visible
-    if panel_visible.0 {
+    // Keep the extension clock current while its control drawer is collapsed.
+    // The original desktop/web UI updates only while its panel is open.
+    if panel_visible.0 || cfg!(feature = "chrome_extension") {
         for mut text in &mut query {
             **text = timer_state.format_time();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Headless `App` tests for the timer-panel button/display systems. Each
+    // spawns its UI entity in `Startup` (so it is flushed before `Update` runs
+    // on the same tick) and presses a button by spawning `Interaction::Pressed`
+    // explicitly — `Button`'s required `Interaction` defaults to `None`, which
+    // would otherwise route every handler through its no-op arm. `Changed<_>`
+    // and `Res::is_changed()` both fire on the first tick for freshly inserted
+    // components/resources, so a single `app.update()` is enough.
+
+    /// Build a headless app with the given `TimerState` and one pressed button
+    /// carrying the marker bundle `B`. The caller adds the system under test and
+    /// calls `app.update()`.
+    fn pressed_button_app<B: Bundle>(timer_state: TimerState, marker: B) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, crate::timer::TimerPlugin));
+        app.insert_resource(timer_state);
+        app.world_mut()
+            .spawn((marker, Button, Interaction::Pressed));
+        app
+    }
+
+    // --- handle_timer_buttons ---------------------------------------------
+
+    #[test]
+    fn time_adjust_button_press_adds_time() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: 60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 240.0);
+        assert_eq!(ts.remaining, 240.0);
+    }
+
+    #[test]
+    fn time_adjust_button_recovers_from_zero() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 0.0,
+                remaining: 0.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: 60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 60.0);
+        assert_eq!(ts.remaining, 60.0);
+    }
+
+    #[test]
+    fn time_adjust_button_negative_subtracts_time() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            TimeAdjustButton { adjustment: -60.0 },
+        );
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.duration, 120.0);
+        assert_eq!(ts.remaining, 120.0);
+    }
+
+    // --- handle_control_buttons (one app per button: outcomes conflict) ---
+
+    #[test]
+    fn start_button_sets_running() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 180.0,
+                is_running: false,
+            },
+            StartButton,
+        );
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
+        app.update();
+        assert!(app.world().resource::<TimerState>().is_running);
+    }
+
+    #[test]
+    fn pause_button_clears_running() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 90.0,
+                is_running: true,
+            },
+            PauseButton,
+        );
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
+        app.update();
+        assert!(!app.world().resource::<TimerState>().is_running);
+    }
+
+    #[test]
+    fn reset_button_restores_and_stops() {
+        let mut app = pressed_button_app(
+            TimerState {
+                duration: 180.0,
+                remaining: 5.0,
+                is_running: true,
+            },
+            ResetButton,
+        );
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
+        app.update();
+        let ts = app.world().resource::<TimerState>();
+        assert_eq!(ts.remaining, 180.0);
+        assert!(!ts.is_running);
+    }
+
+    // --- handle_toggle_button ---------------------------------------------
+
+    /// Press the toggle button once against a `TimerPanelVisible(initial)`.
+    fn toggle_app(initial: bool) -> App {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(initial));
+        app.world_mut()
+            .spawn((ToggleButton, Button, Interaction::Pressed));
+        app.add_systems(Update, handle_toggle_button);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn toggle_button_flips_visibility_on() {
+        let app = toggle_app(false);
+        assert!(app.world().resource::<TimerPanelVisible>().0);
+    }
+
+    #[test]
+    fn toggle_button_flips_visibility_off() {
+        let app = toggle_app(true);
+        assert!(!app.world().resource::<TimerPanelVisible>().0);
+    }
+
+    // --- update_timer_panel_visibility ------------------------------------
+
+    /// Spawn a hidden `TimerControlsContainer`, set panel visibility, run the
+    /// visibility system once, and return the resulting `display`. The resource
+    /// reads as changed on the first tick, so the guarded body runs.
+    fn container_display(visible: bool) -> Display {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(visible));
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((
+                TimerControlsContainer,
+                Node {
+                    display: Display::None,
+                    ..default()
+                },
+            ));
+        });
+        app.add_systems(Update, update_timer_panel_visibility);
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Node, With<TimerControlsContainer>>();
+        query.single(app.world()).unwrap().display
+    }
+
+    #[test]
+    fn visible_panel_shows_container() {
+        assert_eq!(container_display(true), Display::Flex);
+    }
+
+    #[test]
+    fn hidden_panel_collapses_container() {
+        assert_eq!(container_display(false), Display::None);
+    }
+
+    // --- update_time_display ----------------------------------------------
+
+    /// Spawn a `TimeDisplay` text, run the display system once, and return its
+    /// text. Starts as `"xx"` so the not-visible case is detectable.
+    fn time_display_text(visible: bool, remaining: f32) -> String {
+        let mut app = App::new();
+        app.insert_resource(TimerPanelVisible(visible));
+        app.insert_resource(TimerState {
+            duration: 180.0,
+            remaining,
+            is_running: false,
+        });
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((TimeDisplay, Text::new("xx")));
+        });
+        app.add_systems(Update, update_time_display);
+        app.update();
+        let mut query = app.world_mut().query_filtered::<&Text, With<TimeDisplay>>();
+        query.single(app.world()).unwrap().0.clone()
+    }
+
+    #[test]
+    fn time_display_updates_when_panel_visible() {
+        // 65s -> 00:01:05.
+        assert_eq!(time_display_text(true, 65.0), "00:01:05");
+    }
+
+    #[test]
+    #[cfg(not(feature = "chrome_extension"))]
+    fn time_display_untouched_when_panel_hidden() {
+        assert_eq!(time_display_text(false, 65.0), "xx");
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn sidebar_time_display_updates_while_adjustments_are_hidden() {
+        assert_eq!(time_display_text(false, 65.0), "00:01:05");
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn sidebar_clock_and_playback_controls_start_behind_adjust_time() {
+        let mut app = App::new();
+        app.world_mut().spawn(BottomTimerMarker);
+        app.add_systems(Update, spawn_sidebar_timer_controls);
+        app.update();
+
+        let world = app.world_mut();
+        let mut container_query =
+            world.query_filtered::<(Entity, &Node), With<TimerControlsContainer>>();
+        let (container, node) = container_query.single(world).unwrap();
+        assert_eq!(node.display, Display::None);
+
+        let mut clock_query = world.query_filtered::<Entity, With<TimeDisplay>>();
+        let clock = clock_query.single(world).unwrap();
+        assert_eq!(world.get::<ChildOf>(clock).unwrap().parent(), container);
+
+        let mut start_query = world.query_filtered::<Entity, With<StartButton>>();
+        let start = start_query.single(world).unwrap();
+        let playback_row = world.get::<ChildOf>(start).unwrap().parent();
+        assert_eq!(
+            world.get::<ChildOf>(playback_row).unwrap().parent(),
+            container
+        );
+
+        let mut toggle_query = world.query_filtered::<Entity, With<ToggleButton>>();
+        let toggle = toggle_query.single(world).unwrap();
+        assert_ne!(world.get::<ChildOf>(toggle).unwrap().parent(), container);
     }
 }
