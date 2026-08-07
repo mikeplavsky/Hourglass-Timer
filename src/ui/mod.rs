@@ -185,9 +185,25 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.04, 0.04, 0.04, 0.94)),
+                BackgroundColor(Color::NONE),
             ));
         });
+}
+
+#[cfg(all(test, feature = "chrome_extension"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidebar_timer_container_uses_canvas_background() {
+        let mut app = App::new();
+        app.add_systems(Startup, setup_sidebar_ui_layout);
+        app.update();
+
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<&BackgroundColor, With<BottomTimerMarker>>();
+        assert_eq!(query.single(world).unwrap().0, Color::NONE);
+    }
 }
 
 fn handle_appearance_toggle(
