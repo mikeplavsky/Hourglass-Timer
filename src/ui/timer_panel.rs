@@ -62,22 +62,6 @@ fn spawn_sidebar_timer_controls(
     };
 
     commands.entity(panel_entity).with_children(|parent| {
-        parent.spawn((
-            TimeDisplay,
-            Text::new("00:03:00"),
-            TextFont {
-                font_size: 34.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-            Node {
-                margin: UiRect::vertical(Val::Px(3.0)),
-                ..default()
-            },
-        ));
-
-        spawn_sidebar_playback_controls(parent);
-
         parent
             .spawn((
                 ToggleButton,
@@ -117,6 +101,22 @@ fn spawn_sidebar_timer_controls(
                 },
             ))
             .with_children(|parent| {
+                parent.spawn((
+                    TimeDisplay,
+                    Text::new("00:03:00"),
+                    TextFont {
+                        font_size: 34.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    Node {
+                        margin: UiRect::vertical(Val::Px(3.0)),
+                        ..default()
+                    },
+                ));
+
+                spawn_sidebar_playback_controls(parent);
+
                 spawn_sidebar_adjustment_row(
                     parent,
                     &[
@@ -656,8 +656,8 @@ fn update_time_display(
     panel_visible: Res<TimerPanelVisible>,
     mut query: Query<&mut Text, With<TimeDisplay>>,
 ) {
-    // The compact sidebar keeps its clock visible at all times. The original
-    // desktop/web UI still updates only while its collapsible panel is open.
+    // Keep the extension clock current while its control drawer is collapsed.
+    // The original desktop/web UI updates only while its panel is open.
     if panel_visible.0 || cfg!(feature = "chrome_extension") {
         for mut text in &mut query {
             **text = timer_state.format_time();
@@ -888,5 +888,36 @@ mod tests {
     #[cfg(feature = "chrome_extension")]
     fn sidebar_time_display_updates_while_adjustments_are_hidden() {
         assert_eq!(time_display_text(false, 65.0), "00:01:05");
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn sidebar_clock_and_playback_controls_start_behind_adjust_time() {
+        let mut app = App::new();
+        app.world_mut().spawn(BottomTimerMarker);
+        app.add_systems(Update, spawn_sidebar_timer_controls);
+        app.update();
+
+        let world = app.world_mut();
+        let mut container_query =
+            world.query_filtered::<(Entity, &Node), With<TimerControlsContainer>>();
+        let (container, node) = container_query.single(world).unwrap();
+        assert_eq!(node.display, Display::None);
+
+        let mut clock_query = world.query_filtered::<Entity, With<TimeDisplay>>();
+        let clock = clock_query.single(world).unwrap();
+        assert_eq!(world.get::<ChildOf>(clock).unwrap().parent(), container);
+
+        let mut start_query = world.query_filtered::<Entity, With<StartButton>>();
+        let start = start_query.single(world).unwrap();
+        let playback_row = world.get::<ChildOf>(start).unwrap().parent();
+        assert_eq!(
+            world.get::<ChildOf>(playback_row).unwrap().parent(),
+            container
+        );
+
+        let mut toggle_query = world.query_filtered::<Entity, With<ToggleButton>>();
+        let toggle = toggle_query.single(world).unwrap();
+        assert_ne!(world.get::<ChildOf>(toggle).unwrap().parent(), container);
     }
 }

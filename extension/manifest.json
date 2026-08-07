@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hourglass Timer",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "An interactive hourglass timer in Chrome's side panel.",
   "minimum_chrome_version": "116",
   "icons": {
