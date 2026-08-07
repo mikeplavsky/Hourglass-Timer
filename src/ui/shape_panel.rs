@@ -1,5 +1,5 @@
 use crate::resources::{
-    AppearanceStateChanged, HourglassConfig, HourglassShape, PendingFlip, ShapeMode,
+    AppearanceStateChanged, HourglassConfig, HourglassShape, PendingFlip, SAND_COLOR, ShapeMode,
 };
 use crate::timer::{TimerCommand, TimerSet};
 use crate::ui::{AppearancePanelVisible, ShapeRowMarker};
@@ -225,7 +225,7 @@ fn update_mini_hourglass_colors(
 ) {
     if config.is_changed() {
         for mut sand_state in query.iter_mut() {
-            sand_state.sand_config.color = config.color;
+            sand_state.sand_config.color = SAND_COLOR;
             sand_state.needs_update = true;
         }
     }
@@ -328,7 +328,6 @@ fn spawn_shape_buttons(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    config: Res<HourglassConfig>,
 ) {
     // Spawn mini hourglasses in 3D space positioned horizontally for the shape row
     let shapes = [
@@ -351,7 +350,7 @@ fn spawn_shape_buttons(
             .with_body(body_config)
             .with_plates(plates_config)
             .with_sand(HourglassMeshSandConfig {
-                color: config.color,
+                color: SAND_COLOR,
                 fill_percent: 0.7, // Partially filled for visual appeal
                 wall_offset: 1.0,
             })
@@ -653,6 +652,41 @@ mod tests {
 
         assert_eq!(command, TimerCommand::Restart);
         assert!(pending_flip.0);
+    }
+
+    #[test]
+    fn mini_shape_sand_ignores_selected_color() {
+        let mut app = App::new();
+        app.insert_resource(HourglassConfig {
+            color: Color::srgb(0.1, 0.3, 0.8),
+            ..default()
+        });
+        app.world_mut().spawn((
+            MiniHourglass {
+                base_position: Vec3::ZERO,
+                original_x: 0.0,
+            },
+            bevy_hourglass::HourglassMeshSandState {
+                fill_percent: 0.7,
+                body_config: default(),
+                sand_config: HourglassMeshSandConfig {
+                    color: Color::srgb(0.1, 0.5, 0.1),
+                    fill_percent: 0.7,
+                    wall_offset: 1.0,
+                },
+                needs_update: false,
+            },
+        ));
+        app.add_systems(Update, update_mini_hourglass_colors);
+
+        app.update();
+
+        let mut query = app
+            .world_mut()
+            .query::<&bevy_hourglass::HourglassMeshSandState>();
+        let sand_state = query.single(app.world()).unwrap();
+        assert_eq!(sand_state.sand_config.color, SAND_COLOR);
+        assert!(sand_state.needs_update);
     }
 
     // --- shape_button_scale -----------------------------------------------

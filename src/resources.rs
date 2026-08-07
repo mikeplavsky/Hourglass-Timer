@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+pub const SAND_COLOR: Color = Color::srgb(0.8, 0.6, 0.2);
+
 /// Resource to track the current hourglass configuration
 #[derive(Resource, Debug, Clone)]
 pub struct HourglassConfig {
@@ -19,7 +21,7 @@ pub enum ColorMode {
 impl Default for HourglassConfig {
     fn default() -> Self {
         Self {
-            color: Color::srgb(0.8, 0.6, 0.2), // Sandy color
+            color: SAND_COLOR,
             shape_type: HourglassShape::Classic,
             color_mode: ColorMode::Static,
             shape_mode: ShapeMode::Static,
