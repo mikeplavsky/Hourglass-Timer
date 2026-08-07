@@ -18,7 +18,7 @@ Used by: every feature.
 
 **What**: Arithmetic-heavy logic is pulled out of Bevy systems into free functions that take plain values and return plain values — so they run in a unit test without a Bevy `App`, window, or `World`. This is the *only* way to test logic gated behind `viewport_to_world_2d`, which returns `Err` in a headless `App` (no camera projection), making the surrounding system body unreachable.
 **Where**: `tick_countdown` ([[src/timer.rs|timer.rs]]); `lerp_f32`/`interpolate_bulb_style`/`interpolate_neck_style`/`get_morphed_shape_config`/`within_click_radius`/`exceeds_drag_threshold` ([[src/hourglass.rs|hourglass.rs]]); `pick_distinct_color`/`color_dist_sq`/`rainbow_hue`/`hsl_to_rgb` ([[src/ui/color_panel.rs|color_panel.rs]]); `pick_distinct_shape`/`shape_button_scale` ([[src/ui/shape_panel.rs|shape_panel.rs]]); `pause_overlay_should_show` ([[src/ui/pause_overlay.rs|pause_overlay.rs]]); `add_time`/`format_time`/`reset` ([[src/resources.rs|resources.rs]]).
-**Why**: Testability. Together with headless-`App` system tests (below), this discipline supports 83 regular Rust tests, 98 extension-feature Rust tests, and the JavaScript lifecycle suite. The flip side — logic left *inside* a camera/window-gated system stays untested. See [[references/test-coverage]].
+**Why**: Testability. Together with headless-`App` system tests (below), this discipline supports 84 regular Rust tests, 100 extension-feature Rust tests, and the JavaScript lifecycle suite. The flip side — logic left *inside* a camera/window-gated system stays untested. See [[references/test-coverage]].
 
 ## Headless `App` system tests
 

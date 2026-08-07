@@ -122,3 +122,15 @@ test("zero-duration snapshots are preserved", () => {
   assert.equal(result.remainingMs, 0);
   assert.equal(result.status, "finished");
 });
+
+test("coercible non-number durations fall back to the safe default", () => {
+  for (const durationMs of [null, "", false, "0"]) {
+    const result = normalizeState({
+      ...defaultState(),
+      durationMs,
+      remainingMs: 0,
+      status: "finished"
+    });
+    assert.deepEqual(result, defaultState());
+  }
+});

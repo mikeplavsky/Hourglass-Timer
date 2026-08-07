@@ -1,4 +1,4 @@
-<!-- wiki:sources: src/main.rs, src/resources.rs, src/timer.rs, src/hourglass.rs, src/ui/mod.rs, src/chrome_extension.rs, extension/sidepanel.mjs, extension/service-worker.mjs, extension/state.mjs, Cargo.toml -->
+<!-- wiki:sources: src/main.rs, src/resources.rs, src/timer.rs, src/hourglass.rs, src/ui/mod.rs, src/chrome_extension.rs, extension/panel-connection.mjs, extension/sidepanel.mjs, extension/service-worker.mjs, extension/state.mjs, Cargo.toml -->
 
 # Architecture Overview
 
@@ -35,6 +35,7 @@ graph TD
 
     subgraph ChromeExt["Chrome extension target"]
         Loader["sidepanel.mjs<br/>(WASM loader)"]
+        Port["panel-connection.mjs<br/>(Port RPC + heartbeat)"]
         Bridge["ChromeExtensionPlugin<br/>(snapshot bridge)"]
         Worker["service-worker.mjs<br/>(state queue + lifecycle)"]
         Storage["chrome.storage.local"]
@@ -60,7 +61,8 @@ graph TD
     Pause -->|reads| TS
     HG --> Ext
     Shape --> Ext
-    Loader <-->|runtime messages| Worker
+    Loader --> Port
+    Port <-->|long-lived Port messages| Worker
     Loader <-->|custom events| Bridge
     Bridge <-->|reads/writes| Resources
     Worker --> Storage
@@ -88,6 +90,7 @@ graph TD
 | [[modules/pause-overlay]] | [[src/ui/pause_overlay.rs\|src/ui/pause_overlay.rs]] | "PAUSED" banner. |
 | Extension bridge | [[src/chrome_extension.rs\|src/chrome_extension.rs]] | Versioned snapshots, wall-clock deadlines, and Bevy/JavaScript events. |
 | Side-panel loader | `extension/sidepanel.mjs` | Restores state before Bevy starts and synchronizes panel changes. |
+| Panel connection | `extension/panel-connection.mjs` | Sends state RPCs and periodic heartbeats over a reconnecting long-lived Port. |
 | Extension worker | `extension/service-worker.mjs` | Serializes state changes, owns alarms/notifications, tracks live panels, and clears state after the last close. |
 
 ## Key Design Decisions
@@ -99,6 +102,7 @@ graph TD
 - **Pure helpers extracted from systems** — arithmetic-heavy logic is pulled into free functions so it's testable without a Bevy `App`. See [[references/test-coverage]] and [[patterns#Pure helpers extracted from systems]].
 - **Dual UI model** — Bevy UI nodes for the color row / timer panel; world-space sprites for the shape selectors (so they can be real mini-hourglasses). See [[patterns#Dual UI: nodes vs. world sprites]].
 - **One codebase, three targets** — native and ordinary web share the default application behavior; `chrome_extension` adds responsive sidebar layout, lifecycle synchronization, and extension-only appearance semantics.
+- **Live-panel Port protocol** — each side panel sends state requests and 20-second heartbeats over a long-lived runtime Port. This keeps Manifest V3 worker bookkeeping alive while the panel is open and reconnects the panel if Chrome replaces the worker.
 
 ## External Dependencies
 

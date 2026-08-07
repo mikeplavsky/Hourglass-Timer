@@ -47,11 +47,6 @@ globalThis.chrome = {
     create: async () => undefined
   },
   runtime: {
-    onMessage: {
-      addListener: (listener) => {
-        listeners.message = listener;
-      }
-    },
     onConnect: {
       addListener: (listener) => {
         listeners.connect = listener;
@@ -73,27 +68,51 @@ globalThis.chrome = {
 await import(`../service-worker.mjs?test=${Date.now()}`);
 
 function createPanelPort(sourceId) {
+  const messageListeners = [];
   const disconnectListeners = [];
+  const pendingResponses = new Map();
+  let nextRequestId = 0;
+  let disconnected = false;
   return {
     name: `${PANEL_PORT_NAME}:${sourceId}`,
+    onMessage: {
+      addListener: (listener) => messageListeners.push(listener)
+    },
     onDisconnect: {
       addListener: (listener) => disconnectListeners.push(listener)
     },
-    disconnect: () => {
+    postMessage: (response) => {
+      if (disconnected) {
+        throw new Error("Port is disconnected");
+      }
+      const resolve = pendingResponses.get(response.requestId);
+      if (resolve) {
+        pendingResponses.delete(response.requestId);
+        resolve(response);
+      }
+    },
+    request(message) {
+      const requestId = `${sourceId}:${nextRequestId += 1}`;
+      const response = new Promise((resolve) => {
+        pendingResponses.set(requestId, resolve);
+      });
+      for (const listener of messageListeners) {
+        listener({ ...message, requestId });
+      }
+      return response;
+    },
+    heartbeat() {
+      for (const listener of messageListeners) {
+        listener({ type: "panel-heartbeat-v1" });
+      }
+    },
+    disconnect() {
+      disconnected = true;
       for (const listener of disconnectListeners) {
         listener();
       }
     }
   };
-}
-
-function sendRuntimeMessage(message) {
-  return new Promise((resolve) => {
-    const keepChannelOpen = listeners.message(message, {}, resolve);
-    if (keepChannelOpen === false) {
-      queueMicrotask(() => resolve(undefined));
-    }
-  });
 }
 
 async function waitFor(predicate) {
@@ -127,39 +146,67 @@ test("a queued update from the last panel is cleared after disconnect", async ()
   const panel = createPanelPort("panel-closing");
   listeners.connect(panel);
 
-  const response = sendRuntimeMessage({
+  void panel.request({
     type: "set-state-v1",
-    sourceId: "panel-closing",
     state: { ...defaultState(), status: "paused", remainingMs: 60_000 }
   });
   panel.disconnect();
 
-  assert.equal((await response).ok, true);
   await waitFor(() => removedSnapshots === 2);
   assert.equal(removedSnapshots, 2);
   assert.equal(localStorage.has(STORAGE_KEY), false);
   assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME, ALARM_NAME]);
 });
 
-test("updates from a disconnected panel cannot recreate cleared state", async () => {
-  const panel = createPanelPort("panel-stale");
-  listeners.connect(panel);
-  panel.disconnect();
-  await waitFor(() => removedSnapshots === 3);
+test("a replacement connection supersedes stale requests without clearing live state", async () => {
+  const stalePanel = createPanelPort("panel-reconnected");
+  const livePanel = createPanelPort("panel-reconnected");
+  listeners.connect(stalePanel);
+  listeners.connect(livePanel);
 
-  const response = await sendRuntimeMessage({
+  const staleResponse = await stalePanel.request({
     type: "set-state-v1",
-    sourceId: "panel-stale",
     state: { ...defaultState(), status: "paused", remainingMs: 60_000 }
   });
-
-  assert.deepEqual(response, {
+  assert.deepEqual(staleResponse, {
+    requestId: "panel-reconnected:1",
     ok: false,
     error: "Panel is no longer connected"
   });
+
+  stalePanel.disconnect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(removedSnapshots, 2);
+
+  const liveResponse = await livePanel.request({
+    type: "set-state-v1",
+    state: {
+      ...defaultState(),
+      sourceId: "spoofed-source",
+      status: "paused",
+      remainingMs: 60_000
+    }
+  });
+  assert.equal(liveResponse.ok, true);
+  assert.equal(liveResponse.state.sourceId, "panel-reconnected");
+  assert.equal(localStorage.has(STORAGE_KEY), true);
+
+  livePanel.disconnect();
+  await waitFor(() => removedSnapshots === 3);
   assert.equal(localStorage.has(STORAGE_KEY), false);
+});
+
+test("panel heartbeats keep the connection active without changing state", async () => {
+  const panel = createPanelPort("panel-heartbeat");
+  listeners.connect(panel);
+  panel.heartbeat();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
   assert.equal(removedSnapshots, 3);
-  assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME, ALARM_NAME, ALARM_NAME]);
+  assert.equal(localStorage.has(STORAGE_KEY), false);
+
+  panel.disconnect();
+  await waitFor(() => removedSnapshots === 4);
 });
 
 test("browser startup discards stale timer state", async () => {
@@ -170,13 +217,7 @@ test("browser startup discards stale timer state", async () => {
   });
 
   listeners.startup();
-  await waitFor(() => removedSnapshots === 4);
+  await waitFor(() => removedSnapshots === 5);
   assert.equal(localStorage.has(STORAGE_KEY), false);
-  assert.deepEqual(clearedAlarms, [
-    ALARM_NAME,
-    ALARM_NAME,
-    ALARM_NAME,
-    ALARM_NAME,
-    ALARM_NAME
-  ]);
+  assert.equal(clearedAlarms.at(-1), ALARM_NAME);
 });

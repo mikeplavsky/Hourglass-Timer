@@ -102,21 +102,13 @@ async function reconcileState() {
   return scheduleState(await loadState());
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+function handlePanelRequest(message, sourceId) {
   if (message?.type === "get-state-v1") {
-    enqueueStateTask(reconcileState)
-      .then((state) => sendResponse({ ok: true, state }))
-      .catch((error) => sendResponse({ ok: false, error: String(error) }));
-    return true;
+    return enqueueStateTask(reconcileState);
   }
 
   if (message?.type === "set-state-v1") {
-    const sourceId = typeof message.sourceId === "string" ? message.sourceId : "";
-    if (!openPanelPorts.has(sourceId)) {
-      sendResponse({ ok: false, error: "Panel is no longer connected" });
-      return false;
-    }
-    enqueueStateTask(async () => {
+    return enqueueStateTask(async () => {
       const current = await loadState();
       const state = canonicalizePanelState(
         message.state,
@@ -127,14 +119,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return state.status === "finished"
         ? completeAndNotify(state)
         : scheduleState(state);
-    })
-      .then((state) => sendResponse({ ok: true, state }))
-      .catch((error) => sendResponse({ ok: false, error: String(error) }));
-    return true;
+    });
   }
 
-  return false;
-});
+  return Promise.reject(new Error("Unsupported panel request"));
+}
+
+function postPanelResponse(port, response) {
+  try {
+    port.postMessage(response);
+  } catch {
+    // The panel closed while its queued request was being processed.
+  }
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   const prefix = `${PANEL_PORT_NAME}:`;
@@ -146,6 +143,30 @@ chrome.runtime.onConnect.addListener((port) => {
     return;
   }
   openPanelPorts.set(sourceId, port);
+  port.onMessage.addListener((message) => {
+    if (message?.type === "panel-heartbeat-v1") {
+      return;
+    }
+    const requestId = typeof message?.requestId === "string" ? message.requestId : "";
+    if (requestId.length === 0) {
+      return;
+    }
+    if (openPanelPorts.get(sourceId) !== port) {
+      postPanelResponse(port, {
+        requestId,
+        ok: false,
+        error: "Panel is no longer connected"
+      });
+      return;
+    }
+    void handlePanelRequest(message, sourceId)
+      .then((state) => postPanelResponse(port, { requestId, ok: true, state }))
+      .catch((error) => postPanelResponse(port, {
+        requestId,
+        ok: false,
+        error: String(error)
+      }));
+  });
   port.onDisconnect.addListener(() => {
     if (openPanelPorts.get(sourceId) === port) {
       openPanelPorts.delete(sourceId);

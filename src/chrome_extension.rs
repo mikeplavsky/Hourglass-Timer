@@ -373,12 +373,12 @@ fn snapshot_from_resources(
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(test, target_arch = "wasm32"))]
 fn timer_status(timer_state: &TimerState) -> ExtensionTimerStatus {
-    if timer_state.is_running {
-        ExtensionTimerStatus::Running
-    } else if timer_state.remaining <= 0.0 {
+    if timer_state.remaining <= 0.0 {
         ExtensionTimerStatus::Finished
+    } else if timer_state.is_running {
+        ExtensionTimerStatus::Running
     } else if timer_state.remaining >= timer_state.duration {
         ExtensionTimerStatus::Idle
     } else {
@@ -563,6 +563,18 @@ mod tests {
         assert_eq!(timer.remaining, 0.0);
         assert!(!timer.is_running);
         assert_eq!(deadline.0, None);
+    }
+
+    #[test]
+    fn zero_remaining_serializes_as_finished_even_if_running_is_inconsistent() {
+        assert_eq!(
+            timer_status(&TimerState {
+                duration: 0.0,
+                remaining: 0.0,
+                is_running: true,
+            }),
+            ExtensionTimerStatus::Finished
+        );
     }
 
     #[test]

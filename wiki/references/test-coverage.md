@@ -1,8 +1,8 @@
-<!-- wiki:sources: src/resources.rs, src/timer.rs, src/hourglass.rs, src/chrome_extension.rs, src/ui/color_panel.rs, src/ui/shape_panel.rs, src/ui/timer_panel.rs, src/ui/pause_overlay.rs, extension/tests/state.test.mjs, extension/tests/service-worker.test.mjs, TESTING.md -->
+<!-- wiki:sources: src/resources.rs, src/timer.rs, src/hourglass.rs, src/chrome_extension.rs, src/ui/color_panel.rs, src/ui/shape_panel.rs, src/ui/timer_panel.rs, src/ui/pause_overlay.rs, extension/tests/panel-connection.test.mjs, extension/tests/state.test.mjs, extension/tests/service-worker.test.mjs, TESTING.md -->
 
 # Test Coverage
 
-This page answers: **how well do the tests cover each feature?** The current tree has **83 regular Rust tests**, **98 Rust tests with `chrome_extension` enabled**, and **13 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
+This page answers: **how well do the tests cover each feature?** The current tree has **84 regular Rust tests**, **100 Rust tests with `chrome_extension` enabled**, and **17 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
 
 Two complementary patterns make this possible. First, arithmetic-heavy logic is extracted into free functions (`tick_countdown`, `lerp_f32`, `within_click_radius`, `pause_overlay_should_show`, …) that run without a Bevy `App` — see [[patterns#Pure helpers extracted from systems]]. Second, resource-driven systems (timer sync, button handlers, panel/overlay visibility, the first-start flip) are tested in a bare `App::new()`: spawn the entity in `Startup`, run one `app.update()`, then assert on the world. Systems that call `camera.viewport_to_world_2d(...)` can't be driven this way (the projection is unpopulated headless, so the body never runs), so their math is extracted and unit-tested instead.
 
@@ -28,16 +28,16 @@ cargo llvm-cov --no-default-features --html && open target/llvm-cov/html/index.h
 
 | File | Regular / extension | What they cover |
 |------|:-------------------:|-----------------|
-| [[src/chrome_extension.rs\|chrome_extension.rs]] | 0 / 6 | Snapshot wire format, version rejection, zero-duration restoration, absolute deadlines, expiry, and restart reconciliation. |
+| [[src/chrome_extension.rs\|chrome_extension.rs]] | 0 / 7 | Snapshot wire format, version rejection, zero-duration restoration/serialization, absolute deadlines, expiry, and restart reconciliation. |
 | [[src/hourglass.rs\|hourglass.rs]] | 27 / 29 | Pure morph/hit-test helpers; headless flip, timer, color, and extension responsive-scale behavior. |
 | [[src/ui/color_panel.rs\|color_panel.rs]] | 12 / 12 | `color_dist_sq`, `pick_distinct_color`, `rainbow_hue`, `hsl_to_rgb`. |
 | [[src/ui/timer_panel.rs\|timer_panel.rs]] | 12 / 13 | Time adjustment, playback controls, visibility, display updates, and extension collapsed controls. |
 | [[src/resources.rs\|resources.rs]] | 10 / 10 | Default sand state, reset, duration clamps, and formatting. |
 | [[src/ui/pause_overlay.rs\|pause_overlay.rs]] | 7 / 8 | Pause visibility plus the extension's text-free overlay. |
 | [[src/ui/shape_panel.rs\|shape_panel.rs]] | 7 / 9 | Distinct shapes, button scale, fixed mini-preview sand color, extension layout anchoring, and physical-to-logical coordinate conversion. |
-| [[src/timer.rs\|timer.rs]] | 7 / 7 | Semantic timer commands and countdown edges. |
+| [[src/timer.rs\|timer.rs]] | 8 / 8 | Semantic timer commands, zero-duration start prevention, and countdown edges. |
 | [[src/ui/mod.rs\|ui/mod.rs]] | 1 / 4 | Extension-only restart/flip gating and sidebar container/layout properties. |
-| `extension/tests/*.test.mjs` | 13 JS | Snapshot validation/deadlines/revisions, notification deduplication, live-panel lifecycle, and terminal clearing. |
+| `extension/tests/*.test.mjs` | 17 JS | Strict snapshot validation, deadlines/revisions, notification deduplication, Port heartbeats/reconnection, live-panel lifecycle, and terminal clearing. |
 
 ## Feature × Test coverage matrix
 
@@ -50,7 +50,7 @@ cargo llvm-cov --no-default-features --html && open target/llvm-cov/html/index.h
 | [[features/shape-morphing]] | 🟡 | `lerp_f32`, bulb/neck interpolation, morph anchors | `update_morphing_shape` rebuild, throttle |
 | [[features/color-selection]] | 🟡 | distinct-color re-roll, `rainbow_hue`, `hsl_to_rgb`; extension-only restart/flip gating | camera-gated click handlers, splash-particle sync |
 | [[features/shape-selection]] | 🟡 | `pick_distinct_shape`, `shape_button_scale`, `within_click_radius`; extension-only restart/flip gating | camera-gated click handlers + rebuild |
-| Chrome extension state/lifecycle | 🟢 | zero-duration snapshots, deadlines, stale updates, last-panel clearing, revisions, notifications | real Chrome alarm timing after device sleep |
+| Chrome extension state/lifecycle | 🟢 | zero-duration invariants, strict snapshots, deadlines, stale/reconnected Port handling, heartbeats, last-panel clearing, revisions, notifications | real Chrome alarm timing after device sleep |
 | [[features/hourglass-interaction]] | 🟡 | first-start flip / pending guard (`handle_timer_start`), `apply_pending_flip`, `within_click_radius`, `exceeds_drag_threshold` | world-space click/drag dispatch (`handle_hourglass_click`), control-exclusion guard |
 | [[features/web-build]] | 🔴 | — | build script (verified by building) |
 

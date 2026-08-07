@@ -42,8 +42,10 @@ export function normalizeState(input, now = Date.now()) {
     return fallback;
   }
 
-  const inputDurationMs = Number(input.durationMs);
-  const hasValidDuration = Number.isFinite(inputDurationMs) && inputDurationMs >= 0;
+  const inputDurationMs = input.durationMs;
+  const hasValidDuration = typeof inputDurationMs === "number"
+    && Number.isFinite(inputDurationMs)
+    && inputDurationMs >= 0;
   const durationMs = hasValidDuration
     ? clamp(inputDurationMs, 0, MAX_DURATION_MS)
     : fallback.durationMs;

@@ -1,7 +1,12 @@
 import { PANEL_PORT_NAME, STORAGE_KEY, defaultState } from "./state.mjs";
+import { createPanelConnection } from "./panel-connection.mjs";
 
 const sourceId = crypto.randomUUID();
-const panelPort = chrome.runtime.connect({ name: `${PANEL_PORT_NAME}:${sourceId}` });
+const panelConnection = createPanelConnection({
+  runtime: chrome.runtime,
+  portName: PANEL_PORT_NAME,
+  sourceId
+});
 const extensionVersion = chrome.runtime.getManifest().version;
 const canvas = document.getElementById("hourglass-canvas");
 const loading = document.getElementById("loading");
@@ -21,7 +26,7 @@ function reportPanelClosed() {
     return;
   }
   panelClosed = true;
-  panelPort.disconnect();
+  panelConnection.close();
 }
 
 window.addEventListener("pagehide", reportPanelClosed, { once: true });
@@ -38,13 +43,7 @@ function timeoutAfter(milliseconds, message) {
 }
 
 async function send(message) {
-  const response = await Promise.race([
-    chrome.runtime.sendMessage(message),
-    timeoutAfter(5_000, "The extension service worker timed out")
-  ]);
-  if (!response?.ok) {
-    throw new Error(response?.error || "The extension service worker did not respond");
-  }
+  const response = await panelConnection.request(message);
   return response.state;
 }
 
@@ -119,7 +118,7 @@ window.addEventListener("hourglass-state-v1", (event) => {
   }
   try {
     const state = JSON.parse(event.detail);
-    void send({ type: "set-state-v1", sourceId, state }).catch(console.error);
+    void send({ type: "set-state-v1", state }).catch(console.error);
   } catch (error) {
     console.error("Ignoring invalid state from WASM", error);
   }
