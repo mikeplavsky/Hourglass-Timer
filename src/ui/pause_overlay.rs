@@ -44,34 +44,9 @@ fn spawn_pause_overlay(mut commands: Commands) {
             }),
             ZIndex(100), // Ensure it appears above the hourglass
         ))
-        .with_children(|parent| {
-            #[cfg(feature = "chrome_extension")]
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Px(170.0),
-                        height: Val::Px(64.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.78)),
-                    BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("PAUSED"),
-                        TextFont {
-                            font_size: 34.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
-
+        .with_children(|_parent| {
             #[cfg(not(feature = "chrome_extension"))]
-            parent.spawn((
+            _parent.spawn((
                 Text::new("PAUSED"),
                 TextFont {
                     font_size: 48.0,
@@ -117,7 +92,7 @@ fn update_pause_overlay_visibility(
 /// still has time left (`remaining > 0`). At rest before the first start, and
 /// once finished, the overlay stays hidden.
 fn pause_overlay_should_show(is_running: bool, remaining: f32, duration: f32) -> bool {
-    !is_running && remaining > 0.0 && remaining < duration
+    !cfg!(feature = "chrome_extension") && !is_running && remaining > 0.0 && remaining < duration
 }
 
 #[cfg(test)]
@@ -128,7 +103,10 @@ mod tests {
 
     #[test]
     fn shows_when_paused_mid_run() {
-        assert!(pause_overlay_should_show(false, 50.0, 100.0));
+        assert_eq!(
+            pause_overlay_should_show(false, 50.0, 100.0),
+            !cfg!(feature = "chrome_extension")
+        );
     }
 
     #[test]
@@ -150,7 +128,10 @@ mod tests {
 
     #[test]
     fn shows_with_a_sliver_of_time_left() {
-        assert!(pause_overlay_should_show(false, 0.01, 100.0));
+        assert_eq!(
+            pause_overlay_should_show(false, 0.01, 100.0),
+            !cfg!(feature = "chrome_extension")
+        );
     }
 
     // --- update_pause_overlay_visibility (headless wiring) ----------------
@@ -189,7 +170,14 @@ mod tests {
             remaining: 50.0,
             is_running: false,
         });
-        assert_eq!(overlay_display(&mut app), Display::Flex);
+        assert_eq!(
+            overlay_display(&mut app),
+            if cfg!(feature = "chrome_extension") {
+                Display::None
+            } else {
+                Display::Flex
+            }
+        );
     }
 
     #[test]
@@ -200,5 +188,17 @@ mod tests {
             is_running: true,
         });
         assert_eq!(overlay_display(&mut app), Display::None);
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn extension_overlay_contains_no_pause_text() {
+        let mut app = App::new();
+        app.insert_resource(TimerState::default());
+        app.add_plugins(PauseOverlayPlugin);
+        app.update();
+
+        let mut query = app.world_mut().query::<&Text>();
+        assert_eq!(query.iter(app.world()).count(), 0);
     }
 }
