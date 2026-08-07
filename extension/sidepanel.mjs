@@ -1,6 +1,7 @@
-import { STORAGE_KEY, defaultState } from "./state.mjs";
+import { PANEL_PORT_NAME, STORAGE_KEY, defaultState } from "./state.mjs";
 
 const sourceId = crypto.randomUUID();
+const panelPort = chrome.runtime.connect({ name: PANEL_PORT_NAME });
 const extensionVersion = chrome.runtime.getManifest().version;
 const canvas = document.getElementById("hourglass-canvas");
 const loading = document.getElementById("loading");
@@ -13,6 +14,18 @@ let bootstrapRevision = -1;
 let startupWatchdog = null;
 let startupStage = "Loading Hourglass Timer…";
 let preflightAdapter = null;
+let panelClosed = false;
+
+function reportPanelClosed() {
+  if (panelClosed) {
+    return;
+  }
+  panelClosed = true;
+  void chrome.runtime.sendMessage({ type: "panel-closed-v1" }).catch(() => undefined);
+  panelPort.disconnect();
+}
+
+window.addEventListener("pagehide", reportPanelClosed, { once: true });
 
 function setStartupStage(stage) {
   startupStage = stage;

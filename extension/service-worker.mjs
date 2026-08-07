@@ -1,6 +1,7 @@
 import {
   ALARM_NAME,
   NOTIFICATION_ID,
+  PANEL_PORT_NAME,
   STORAGE_KEY,
   alarmDecision,
   canonicalizePanelState,
@@ -13,6 +14,8 @@ import {
 
 const WORKER_SOURCE = "worker";
 let stateQueue = Promise.resolve();
+const openPanelPorts = new Set();
+let pendingStateClear = null;
 
 function enqueueStateTask(task) {
   const result = stateQueue.then(task, task);
@@ -32,6 +35,22 @@ async function loadState() {
 async function saveState(state) {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
   return state;
+}
+
+async function clearStoredState() {
+  await chrome.alarms.clear(ALARM_NAME);
+  await chrome.storage.local.remove(STORAGE_KEY);
+  return defaultState();
+}
+
+function requestStoredStateClear() {
+  if (pendingStateClear === null) {
+    pendingStateClear = enqueueStateTask(clearStoredState)
+      .finally(() => {
+        pendingStateClear = null;
+      });
+  }
+  return pendingStateClear;
 }
 
 async function showCompletionNotification(state) {
@@ -91,6 +110,17 @@ async function reconcileState() {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "panel-closed-v1") {
+    if (openPanelPorts.size <= 1) {
+      requestStoredStateClear()
+        .then((state) => sendResponse({ ok: true, state }))
+        .catch((error) => sendResponse({ ok: false, error: String(error) }));
+      return true;
+    }
+    sendResponse({ ok: true, state: null });
+    return false;
+  }
+
   if (message?.type === "get-state-v1") {
     enqueueStateTask(reconcileState)
       .then((state) => sendResponse({ ok: true, state }))
@@ -119,6 +149,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== PANEL_PORT_NAME) {
+    return;
+  }
+  openPanelPorts.add(port);
+  port.onDisconnect.addListener(() => {
+    openPanelPorts.delete(port);
+    if (openPanelPorts.size === 0) {
+      void requestStoredStateClear().catch(console.error);
+    }
+  });
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) {
     return;
@@ -133,11 +176,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void enqueueStateTask(reconcileState).catch(console.error);
+  void requestStoredStateClear().catch(console.error);
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  void enqueueStateTask(reconcileState).catch(console.error);
+  void requestStoredStateClear().catch(console.error);
 });
-
-void enqueueStateTask(reconcileState).catch(console.error);

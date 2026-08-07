@@ -2,6 +2,7 @@ export const SNAPSHOT_VERSION = 1;
 export const STORAGE_KEY = "hourglassStateV1";
 export const ALARM_NAME = "hourglass-timer-complete";
 export const NOTIFICATION_ID = "hourglass-timer-complete";
+export const PANEL_PORT_NAME = "hourglass-side-panel-v1";
 export const MAX_DURATION_MS = 24 * 60 * 60 * 1000;
 
 const STATUSES = new Set(["idle", "running", "paused", "finished"]);
