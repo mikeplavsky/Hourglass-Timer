@@ -462,6 +462,11 @@ fn pick_distinct_shape(current: HourglassShape, rng: &mut impl Rng) -> Hourglass
     new_shape
 }
 
+fn shape_change_command(pending_flip: &mut PendingFlip) -> TimerCommand {
+    pending_flip.0 = true;
+    TimerCommand::Restart
+}
+
 fn handle_random_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -495,9 +500,8 @@ fn handle_random_shape_button_clicks(
                                 config.shape_type = new_shape;
                                 config.shape_mode = ShapeMode::Static;
                                 // Selecting a shape starts the countdown over and flips
-                                timer_commands.write(TimerCommand::Restart);
+                                timer_commands.write(shape_change_command(&mut pending_flip));
                                 appearance_changed.write_default();
-                                pending_flip.0 = true;
                             }
                         }
                     }
@@ -513,6 +517,8 @@ fn handle_morphing_button_clicks(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     morphing_button_query: Query<&Transform, (With<MorphingButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
+    mut pending_flip: ResMut<PendingFlip>,
+    mut timer_commands: EventWriter<TimerCommand>,
     mut appearance_changed: EventWriter<AppearanceStateChanged>,
     appearance_visible: Res<AppearancePanelVisible>,
 ) {
@@ -541,6 +547,7 @@ fn handle_morphing_button_clicks(
                                 } else {
                                     config.shape_mode = ShapeMode::Static;
                                 }
+                                timer_commands.write(shape_change_command(&mut pending_flip));
                                 appearance_changed.write_default();
                             }
                         }
@@ -584,9 +591,8 @@ fn handle_shape_button_clicks(
                                 config.shape_type = shape_button.shape;
                                 config.shape_mode = ShapeMode::Static; // Set to static when selecting a specific shape
                                 // Selecting a shape starts the countdown over and flips
-                                timer_commands.write(TimerCommand::Restart);
+                                timer_commands.write(shape_change_command(&mut pending_flip));
                                 appearance_changed.write_default();
-                                pending_flip.0 = true;
                                 break;
                             }
                         }
@@ -637,6 +643,16 @@ mod tests {
         let a = pick_distinct_shape(HourglassShape::Classic, &mut rng_a);
         let b = pick_distinct_shape(HourglassShape::Classic, &mut rng_b);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn shape_change_requests_restart_and_flip() {
+        let mut pending_flip = PendingFlip(false);
+
+        let command = shape_change_command(&mut pending_flip);
+
+        assert_eq!(command, TimerCommand::Restart);
+        assert!(pending_flip.0);
     }
 
     // --- shape_button_scale -----------------------------------------------
