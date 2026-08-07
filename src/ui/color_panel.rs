@@ -1,7 +1,7 @@
 use crate::resources::{
     AppearanceStateChanged, COLOR_PALETTE, ColorMode, HourglassConfig, PendingFlip,
 };
-use crate::timer::{TimerCommand, TimerSet};
+use crate::timer::{TimerCommand, TimerSystems};
 use crate::ui::ColorRowMarker;
 use bevy::prelude::*;
 use rand::Rng;
@@ -18,7 +18,7 @@ impl Plugin for ColorPanelPlugin {
                     handle_random_color_button,
                     handle_rainbow_color_button,
                 )
-                    .in_set(TimerSet::Input),
+                    .in_set(TimerSystems::Input),
             )
             .add_systems(Update, (update_rainbow_color,));
     }

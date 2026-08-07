@@ -9,7 +9,7 @@ pub struct TimerPlugin;
 /// countdown advances, and observers (such as extension persistence) see the
 /// resulting state last.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TimerSet {
+pub enum TimerSystems {
     Restore,
     Input,
     Apply,
@@ -44,19 +44,19 @@ impl Plugin for TimerPlugin {
             .configure_sets(
                 Update,
                 (
-                    TimerSet::Restore,
-                    TimerSet::Input,
-                    TimerSet::Apply,
-                    TimerSet::Deadline,
-                    TimerSet::Tick,
-                    TimerSet::Observe,
+                    TimerSystems::Restore,
+                    TimerSystems::Input,
+                    TimerSystems::Apply,
+                    TimerSystems::Deadline,
+                    TimerSystems::Tick,
+                    TimerSystems::Observe,
                 )
                     .chain(),
             )
-            .add_systems(Update, apply_timer_commands.in_set(TimerSet::Apply));
+            .add_systems(Update, apply_timer_commands.in_set(TimerSystems::Apply));
 
         #[cfg(not(all(feature = "chrome_extension", target_arch = "wasm32")))]
-        app.add_systems(Update, update_timer.in_set(TimerSet::Tick));
+        app.add_systems(Update, update_timer.in_set(TimerSystems::Tick));
     }
 }
 

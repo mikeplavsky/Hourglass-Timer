@@ -1,7 +1,7 @@
 use crate::resources::{
     AppearanceStateChanged, HourglassConfig, HourglassShape, PendingFlip, SAND_COLOR, ShapeMode,
 };
-use crate::timer::{TimerCommand, TimerSet};
+use crate::timer::{TimerCommand, TimerSystems};
 use crate::ui::{AppearancePanelVisible, ShapeRowMarker};
 #[cfg(feature = "chrome_extension")]
 use crate::ui::{SIDEBAR_APPEARANCE_PADDING, SIDEBAR_COLOR_ROW_HEIGHT, SIDEBAR_SHAPE_ROW_HEIGHT};
@@ -38,7 +38,7 @@ impl Plugin for ShapePanelPlugin {
                 handle_random_shape_button_clicks,
                 handle_morphing_button_clicks,
             )
-                .in_set(TimerSet::Input),
+                .in_set(TimerSystems::Input),
         )
         .add_systems(
             Update,

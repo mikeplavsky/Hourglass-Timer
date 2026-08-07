@@ -1,7 +1,7 @@
 use crate::resources::{
     ColorMode, HourglassConfig, HourglassShape, PendingFlip, ShapeMode, TimerState,
 };
-use crate::timer::{TimerCommand, TimerSet};
+use crate::timer::{TimerCommand, TimerSystems};
 use crate::ui::shape_panel::MiniHourglass;
 #[cfg(feature = "chrome_extension")]
 use crate::ui::{AppearancePanelVisible, TimerPanelVisible};
@@ -31,14 +31,14 @@ impl Plugin for HourglassPlugin {
                     update_hourglass_timer.after(update_morphing_shape),
                     handle_timer_start,
                 )
-                    .in_set(TimerSet::Observe),
+                    .in_set(TimerSystems::Observe),
             )
-            .add_systems(Update, handle_hourglass_click.in_set(TimerSet::Input));
+            .add_systems(Update, handle_hourglass_click.in_set(TimerSystems::Input));
 
         #[cfg(feature = "chrome_extension")]
         app.add_systems(
             Update,
-            update_sidebar_hourglass_scale.in_set(TimerSet::Observe),
+            update_sidebar_hourglass_scale.in_set(TimerSystems::Observe),
         );
     }
 }

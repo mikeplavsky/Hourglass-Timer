@@ -1,7 +1,7 @@
 use crate::resources::{AppearanceStateChanged, TimerState};
 #[cfg(any(test, target_arch = "wasm32"))]
 use crate::resources::{ColorMode, HourglassConfig, HourglassShape, ShapeMode};
-use crate::timer::{TimerCommand, TimerSet, TimerStateChanged};
+use crate::timer::{TimerCommand, TimerStateChanged, TimerSystems};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -35,13 +35,13 @@ impl Plugin for ChromeExtensionPlugin {
             .init_resource::<ExtensionSyncRevision>()
             .add_systems(PreStartup, initialize_extension_bridge)
             .add_systems(PostStartup, signal_extension_ready)
-            .add_systems(Update, apply_queued_snapshots.in_set(TimerSet::Restore))
+            .add_systems(Update, apply_queued_snapshots.in_set(TimerSystems::Restore))
             .add_systems(
                 Update,
-                update_deadline_from_changes.in_set(TimerSet::Deadline),
+                update_deadline_from_changes.in_set(TimerSystems::Deadline),
             )
-            .add_systems(Update, update_wall_clock_timer.in_set(TimerSet::Tick))
-            .add_systems(Update, emit_extension_state.in_set(TimerSet::Observe));
+            .add_systems(Update, update_wall_clock_timer.in_set(TimerSystems::Tick))
+            .add_systems(Update, emit_extension_state.in_set(TimerSystems::Observe));
     }
 }
 
@@ -181,10 +181,10 @@ fn signal_extension_ready() {
         warn!("Could not create extension ready event");
         return;
     };
-    if let Some(window) = web_sys::window()
-        && let Err(error) = window.dispatch_event(&event)
-    {
-        warn!("Could not dispatch extension ready event: {error:?}");
+    if let Some(window) = web_sys::window() {
+        if let Err(error) = window.dispatch_event(&event) {
+            warn!("Could not dispatch extension ready event: {error:?}");
+        }
     }
 }
 
@@ -192,10 +192,10 @@ fn signal_extension_ready() {
 pub(crate) fn report_startup_stage(stage: &str) {
     let init = CustomEventInit::new();
     init.set_detail(&JsValue::from_str(stage));
-    if let Ok(event) = CustomEvent::new_with_event_init_dict(STARTUP_STAGE_EVENT, &init)
-        && let Some(window) = web_sys::window()
-    {
-        let _ = window.dispatch_event(&event);
+    if let Ok(event) = CustomEvent::new_with_event_init_dict(STARTUP_STAGE_EVENT, &init) {
+        if let Some(window) = web_sys::window() {
+            let _ = window.dispatch_event(&event);
+        }
     }
 }
 
@@ -319,10 +319,10 @@ fn emit_extension_state(
         warn!("Could not create extension state event");
         return;
     };
-    if let Some(window) = web_sys::window()
-        && let Err(error) = window.dispatch_event(&event)
-    {
-        warn!("Could not dispatch extension state: {error:?}");
+    if let Some(window) = web_sys::window() {
+        if let Err(error) = window.dispatch_event(&event) {
+            warn!("Could not dispatch extension state: {error:?}");
+        }
     }
 }
 
@@ -582,7 +582,7 @@ mod tests {
             (|mut commands: EventWriter<TimerCommand>| {
                 commands.write(TimerCommand::Restart);
             })
-            .in_set(TimerSet::Input),
+            .in_set(TimerSystems::Input),
         );
 
         app.update();

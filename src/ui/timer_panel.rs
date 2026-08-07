@@ -1,5 +1,5 @@
 use crate::resources::TimerState;
-use crate::timer::{TimerCommand, TimerSet};
+use crate::timer::{TimerCommand, TimerSystems};
 use crate::ui::{BottomTimerMarker, TimerPanelVisible};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
@@ -16,12 +16,12 @@ impl Plugin for TimerPanelPlugin {
 
         app.add_systems(
             Update,
-            (handle_timer_buttons, handle_control_buttons).in_set(TimerSet::Input),
+            (handle_timer_buttons, handle_control_buttons).in_set(TimerSystems::Input),
         )
         .add_systems(
             Update,
             (
-                update_time_display.after(TimerSet::Tick),
+                update_time_display.after(TimerSystems::Tick),
                 handle_toggle_button,
                 update_timer_panel_visibility,
             ),
@@ -701,7 +701,7 @@ mod tests {
             },
             TimeAdjustButton { adjustment: 60.0 },
         );
-        app.add_systems(Update, handle_timer_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
         app.update();
         let ts = app.world().resource::<TimerState>();
         assert_eq!(ts.duration, 240.0);
@@ -718,7 +718,7 @@ mod tests {
             },
             TimeAdjustButton { adjustment: 60.0 },
         );
-        app.add_systems(Update, handle_timer_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
         app.update();
         let ts = app.world().resource::<TimerState>();
         assert_eq!(ts.duration, 60.0);
@@ -735,7 +735,7 @@ mod tests {
             },
             TimeAdjustButton { adjustment: -60.0 },
         );
-        app.add_systems(Update, handle_timer_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_timer_buttons.in_set(TimerSystems::Input));
         app.update();
         let ts = app.world().resource::<TimerState>();
         assert_eq!(ts.duration, 120.0);
@@ -754,7 +754,7 @@ mod tests {
             },
             StartButton,
         );
-        app.add_systems(Update, handle_control_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
         app.update();
         assert!(app.world().resource::<TimerState>().is_running);
     }
@@ -769,7 +769,7 @@ mod tests {
             },
             PauseButton,
         );
-        app.add_systems(Update, handle_control_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
         app.update();
         assert!(!app.world().resource::<TimerState>().is_running);
     }
@@ -784,7 +784,7 @@ mod tests {
             },
             ResetButton,
         );
-        app.add_systems(Update, handle_control_buttons.in_set(TimerSet::Input));
+        app.add_systems(Update, handle_control_buttons.in_set(TimerSystems::Input));
         app.update();
         let ts = app.world().resource::<TimerState>();
         assert_eq!(ts.remaining, 180.0);
