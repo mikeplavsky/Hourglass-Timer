@@ -97,6 +97,7 @@ pub struct AppearanceStateChanged;
 
 // Color palette for the color selector
 pub const COLOR_PALETTE: &[Color] = &[
+    SAND_COLOR,                 // Sand (default)
     Color::srgb(0.0, 0.0, 0.0), // Black
     Color::srgb(1.0, 1.0, 1.0), // White
     Color::srgb(0.1, 0.3, 0.8), // Blue
@@ -117,6 +118,12 @@ mod tests {
             remaining,
             is_running,
         }
+    }
+
+    #[test]
+    fn sand_color_is_the_default_and_is_selectable() {
+        assert_eq!(HourglassConfig::default().color, SAND_COLOR);
+        assert!(COLOR_PALETTE.contains(&SAND_COLOR));
     }
 
     #[test]

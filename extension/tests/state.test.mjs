@@ -10,6 +10,12 @@ import {
   normalizeState
 } from "../state.mjs";
 
+test("fresh extension state uses the sand color", () => {
+  const state = defaultState();
+  assert.equal(state.appearance.colorMode, "static");
+  assert.deepEqual(state.appearance.colorRgba, [0.8, 0.6, 0.2, 1]);
+});
+
 test("running state reconciles against its absolute deadline", () => {
   const input = {
     ...defaultState(),
