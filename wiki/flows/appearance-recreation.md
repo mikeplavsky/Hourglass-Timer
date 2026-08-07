@@ -63,7 +63,7 @@ Then, before rebuilding: read the old entity's `flipping` + `DragState`; **if fl
 
 ## Flipping the rebuilt hourglass
 
-A color or shape change doesn't only rebuild the hourglass — it also **flips** it, so the sand resets to the top to match the restarted countdown. The flip can't be issued at the click site: the rebuild despawns the current entity, and a flip applied to that doomed entity (a) is lost when it's despawned and (b) sets its `flipping` flag, which the rebuild guard reads as "don't interrupt a flip" — silently dropping the whole color/shape change. So the flip is deferred onto the *new* entity via a one-shot resource, [[modules/resources#PendingFlip|`PendingFlip`]].
+On the Chrome extension target, a color or shape change also **flips** the hourglass so the sand resets to the top with the restarted countdown. The flip can't be issued at the click site because the rebuild despawns the current entity, so it is deferred onto the *new* entity via [[modules/resources#PendingFlip|`PendingFlip`]]. Native and ordinary web appearance changes rebuild without requesting this flip.
 
 ```mermaid
 sequenceDiagram

@@ -14,8 +14,7 @@ import {
 
 const WORKER_SOURCE = "worker";
 let stateQueue = Promise.resolve();
-const openPanelPorts = new Set();
-let pendingStateClear = null;
+const openPanelPorts = new Map();
 
 function enqueueStateTask(task) {
   const result = stateQueue.then(task, task);
@@ -44,13 +43,7 @@ async function clearStoredState() {
 }
 
 function requestStoredStateClear() {
-  if (pendingStateClear === null) {
-    pendingStateClear = enqueueStateTask(clearStoredState)
-      .finally(() => {
-        pendingStateClear = null;
-      });
-  }
-  return pendingStateClear;
+  return enqueueStateTask(clearStoredState);
 }
 
 async function showCompletionNotification(state) {
@@ -110,17 +103,6 @@ async function reconcileState() {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "panel-closed-v1") {
-    if (openPanelPorts.size <= 1) {
-      requestStoredStateClear()
-        .then((state) => sendResponse({ ok: true, state }))
-        .catch((error) => sendResponse({ ok: false, error: String(error) }));
-      return true;
-    }
-    sendResponse({ ok: true, state: null });
-    return false;
-  }
-
   if (message?.type === "get-state-v1") {
     enqueueStateTask(reconcileState)
       .then((state) => sendResponse({ ok: true, state }))
@@ -129,12 +111,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "set-state-v1") {
+    const sourceId = typeof message.sourceId === "string" ? message.sourceId : "";
+    if (!openPanelPorts.has(sourceId)) {
+      sendResponse({ ok: false, error: "Panel is no longer connected" });
+      return false;
+    }
     enqueueStateTask(async () => {
       const current = await loadState();
       const state = canonicalizePanelState(
         message.state,
         current,
-        typeof message.sourceId === "string" ? message.sourceId : "panel"
+        sourceId
       );
       await saveState(state);
       return state.status === "finished"
@@ -150,12 +137,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== PANEL_PORT_NAME) {
+  const prefix = `${PANEL_PORT_NAME}:`;
+  if (!port.name.startsWith(prefix)) {
     return;
   }
-  openPanelPorts.add(port);
+  const sourceId = port.name.slice(prefix.length);
+  if (sourceId.length === 0) {
+    return;
+  }
+  openPanelPorts.set(sourceId, port);
   port.onDisconnect.addListener(() => {
-    openPanelPorts.delete(port);
+    if (openPanelPorts.get(sourceId) === port) {
+      openPanelPorts.delete(sourceId);
+    }
     if (openPanelPorts.size === 0) {
       void requestStoredStateClear().catch(console.error);
     }

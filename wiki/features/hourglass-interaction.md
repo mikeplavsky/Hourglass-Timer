@@ -36,7 +36,7 @@ Key modules: [[modules/hourglass]], [[modules/pause-overlay]].
 
 ## Flip on color/shape change
 
-Changing the color or shape also flips the hourglass, so the sand visibly resets to the top along with the restarted countdown. Because a color/shape change despawns and rebuilds the hourglass entity, the flip is **queued** rather than applied inline: the click handler sets the [[modules/resources#PendingFlip|`PendingFlip`]] resource, and `apply_pending_flip` flips the rebuilt entity the next frame. `handle_timer_start` suppresses its own first-start flip while a `PendingFlip` is outstanding, so the two flip paths never fight over the same (about-to-be-despawned) entity. The full handshake is in [[modules/hourglass#Flip-on-change orchestration]] and [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
+In the Chrome extension, changing the color or shape also flips the hourglass, so the sand visibly resets to the top with the restarted countdown. Because the change rebuilds the entity, the flip is **queued** through [[modules/resources#PendingFlip|`PendingFlip`]] and applied to the new entity on the next frame. Native and ordinary web builds do not request this appearance-change flip. The full extension handshake is in [[modules/hourglass#Flip-on-change orchestration]] and [[flows/appearance-recreation#Flipping the rebuilt hourglass]].
 
 ## Pause overlay
 

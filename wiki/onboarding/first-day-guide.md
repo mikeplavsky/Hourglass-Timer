@@ -56,4 +56,4 @@ You need five ideas to be productive here:
 
 ## A Word of Caution
 
-Per the README this was developed through LLM prompting — "there be dragons." A few quirks are documented and even pinned by tests (e.g. `format_time` doesn't guard negatives; the morph throttle comment disagrees with its constant). The biggest untested area is the **side effect that picking a color/shape restarts the timer** — keep it in mind when editing the panels. See [[references/test-coverage#Biggest coverage gaps]].
+Per the README this was developed through LLM prompting — "there be dragons." A few quirks are documented and pinned by tests. The biggest untested area is camera-gated click dispatch; extension-only appearance restart/flip gating is covered separately. See [[references/test-coverage#Biggest coverage gaps]].

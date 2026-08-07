@@ -72,10 +72,10 @@ globalThis.chrome = {
 
 await import(`../service-worker.mjs?test=${Date.now()}`);
 
-function createPanelPort() {
+function createPanelPort(sourceId) {
   const disconnectListeners = [];
   return {
-    name: PANEL_PORT_NAME,
+    name: `${PANEL_PORT_NAME}:${sourceId}`,
     onDisconnect: {
       addListener: (listener) => disconnectListeners.push(listener)
     },
@@ -85,6 +85,15 @@ function createPanelPort() {
       }
     }
   };
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve) => {
+    const keepChannelOpen = listeners.message(message, {}, resolve);
+    if (keepChannelOpen === false) {
+      queueMicrotask(() => resolve(undefined));
+    }
+  });
 }
 
 async function waitFor(predicate) {
@@ -99,8 +108,8 @@ async function waitFor(predicate) {
 
 test("the last closed panel clears its snapshot and completion alarm", async () => {
   localStorage.set(STORAGE_KEY, { ...defaultState(), status: "paused" });
-  const firstPanel = createPanelPort();
-  const secondPanel = createPanelPort();
+  const firstPanel = createPanelPort("panel-a");
+  const secondPanel = createPanelPort("panel-b");
   listeners.connect(firstPanel);
   listeners.connect(secondPanel);
 
@@ -113,23 +122,44 @@ test("the last closed panel clears its snapshot and completion alarm", async () 
   assert.deepEqual(clearedAlarms, [ALARM_NAME]);
 });
 
-test("the pagehide fallback and port disconnect share one reset", async () => {
+test("a queued update from the last panel is cleared after disconnect", async () => {
   localStorage.set(STORAGE_KEY, { ...defaultState(), status: "paused" });
-  const panel = createPanelPort();
+  const panel = createPanelPort("panel-closing");
   listeners.connect(panel);
 
-  const response = new Promise((resolve) => {
-    assert.equal(
-      listeners.message({ type: "panel-closed-v1" }, {}, resolve),
-      true
-    );
+  const response = sendRuntimeMessage({
+    type: "set-state-v1",
+    sourceId: "panel-closing",
+    state: { ...defaultState(), status: "paused", remainingMs: 60_000 }
   });
   panel.disconnect();
 
-  assert.deepEqual(await response, { ok: true, state: defaultState() });
+  assert.equal((await response).ok, true);
+  await waitFor(() => removedSnapshots === 2);
   assert.equal(removedSnapshots, 2);
   assert.equal(localStorage.has(STORAGE_KEY), false);
-  assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME]);
+  assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME, ALARM_NAME]);
+});
+
+test("updates from a disconnected panel cannot recreate cleared state", async () => {
+  const panel = createPanelPort("panel-stale");
+  listeners.connect(panel);
+  panel.disconnect();
+  await waitFor(() => removedSnapshots === 3);
+
+  const response = await sendRuntimeMessage({
+    type: "set-state-v1",
+    sourceId: "panel-stale",
+    state: { ...defaultState(), status: "paused", remainingMs: 60_000 }
+  });
+
+  assert.deepEqual(response, {
+    ok: false,
+    error: "Panel is no longer connected"
+  });
+  assert.equal(localStorage.has(STORAGE_KEY), false);
+  assert.equal(removedSnapshots, 3);
+  assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME, ALARM_NAME, ALARM_NAME]);
 });
 
 test("browser startup discards stale timer state", async () => {
@@ -140,7 +170,13 @@ test("browser startup discards stale timer state", async () => {
   });
 
   listeners.startup();
-  await waitFor(() => removedSnapshots === 3);
+  await waitFor(() => removedSnapshots === 4);
   assert.equal(localStorage.has(STORAGE_KEY), false);
-  assert.deepEqual(clearedAlarms, [ALARM_NAME, ALARM_NAME, ALARM_NAME]);
+  assert.deepEqual(clearedAlarms, [
+    ALARM_NAME,
+    ALARM_NAME,
+    ALARM_NAME,
+    ALARM_NAME,
+    ALARM_NAME
+  ]);
 });

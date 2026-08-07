@@ -43,17 +43,17 @@ export function normalizeState(input, now = Date.now()) {
   }
 
   const inputDurationMs = Number(input.durationMs);
-  const hasUsableDuration = Number.isFinite(inputDurationMs) && inputDurationMs > 0;
-  const durationMs = hasUsableDuration
+  const hasValidDuration = Number.isFinite(inputDurationMs) && inputDurationMs >= 0;
+  const durationMs = hasValidDuration
     ? clamp(inputDurationMs, 0, MAX_DURATION_MS)
     : fallback.durationMs;
-  let remainingMs = hasUsableDuration
+  let remainingMs = hasValidDuration
     ? clamp(Number(input.remainingMs), 0, durationMs)
     : durationMs;
-  let status = hasUsableDuration
+  let status = hasValidDuration
     ? oneOf(input.status, STATUSES, remainingMs === durationMs ? "idle" : "paused")
     : "idle";
-  let deadlineMs = hasUsableDuration && Number.isFinite(input.deadlineMs)
+  let deadlineMs = hasValidDuration && Number.isFinite(input.deadlineMs)
     ? Number(input.deadlineMs)
     : null;
 
