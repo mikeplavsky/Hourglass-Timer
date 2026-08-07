@@ -98,7 +98,7 @@ fn sidebar_hourglass_scale(
     appearance_open: bool,
     timer_adjustments_open: bool,
 ) -> f32 {
-    let top_reserved = if appearance_open { 112.0 } else { 42.0 };
+    let top_reserved = if appearance_open { 92.0 } else { 42.0 };
     let bottom_reserved = if timer_adjustments_open { 190.0 } else { 42.0 };
     let horizontal = (window_width - 24.0) / 400.0;
     let vertical = (window_height - top_reserved - bottom_reserved - 24.0) / 480.0;

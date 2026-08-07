@@ -3,6 +3,8 @@ use crate::resources::{
 };
 use crate::timer::{TimerCommand, TimerSet};
 use crate::ui::{AppearancePanelVisible, ShapeRowMarker};
+#[cfg(feature = "chrome_extension")]
+use crate::ui::{SIDEBAR_APPEARANCE_PADDING, SIDEBAR_COLOR_ROW_HEIGHT, SIDEBAR_SHAPE_ROW_HEIGHT};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy_hourglass::{Hourglass, HourglassMeshBuilder, HourglassMeshSandConfig};
@@ -245,11 +247,7 @@ fn update_mini_hourglass_positions(
                 let window_width = window.width();
 
                 // Calculate shape row position based on UI layout:
-                let shape_row_center_y = if cfg!(feature = "chrome_extension") {
-                    112.0
-                } else {
-                    60.0
-                };
+                let shape_row_center_y = shape_preview_center_y();
                 let horizontal_scale = if cfg!(feature = "chrome_extension") {
                     ((window_width - 36.0) / 280.0).clamp(0.55, 1.0)
                 } else {
@@ -283,6 +281,18 @@ fn update_mini_hourglass_positions(
                 }
             }
         }
+    }
+}
+
+fn shape_preview_center_y() -> f32 {
+    #[cfg(feature = "chrome_extension")]
+    {
+        SIDEBAR_APPEARANCE_PADDING + SIDEBAR_COLOR_ROW_HEIGHT + SIDEBAR_SHAPE_ROW_HEIGHT / 2.0
+    }
+
+    #[cfg(not(feature = "chrome_extension"))]
+    {
+        60.0
     }
 }
 
@@ -652,6 +662,12 @@ mod tests {
 
         assert_eq!(command, TimerCommand::Restart);
         assert!(pending_flip.0);
+    }
+
+    #[test]
+    #[cfg(feature = "chrome_extension")]
+    fn shape_preview_row_immediately_follows_color_row() {
+        assert_eq!(shape_preview_center_y(), 58.0);
     }
 
     #[test]

@@ -8,6 +8,13 @@ use bevy::prelude::*;
 
 pub struct UIPlugin;
 
+#[cfg(feature = "chrome_extension")]
+pub(crate) const SIDEBAR_APPEARANCE_PADDING: f32 = 4.0;
+#[cfg(feature = "chrome_extension")]
+pub(crate) const SIDEBAR_COLOR_ROW_HEIGHT: f32 = 28.0;
+#[cfg(feature = "chrome_extension")]
+pub(crate) const SIDEBAR_SHAPE_ROW_HEIGHT: f32 = 52.0;
+
 // Marker components for UI panels
 #[derive(Component)]
 pub struct TopControlsMarker;
@@ -81,7 +88,7 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                         display: Display::Flex,
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
-                        padding: UiRect::all(Val::Px(4.0)),
+                        padding: UiRect::all(Val::Px(SIDEBAR_APPEARANCE_PADDING)),
                         ..default()
                     },
                 ))
@@ -104,7 +111,7 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                                 ColorRowMarker,
                                 Node {
                                     width: Val::Percent(100.0),
-                                    min_height: Val::Px(48.0),
+                                    height: Val::Px(SIDEBAR_COLOR_ROW_HEIGHT),
                                     display: Display::Flex,
                                     flex_direction: FlexDirection::Row,
                                     flex_wrap: FlexWrap::Wrap,
@@ -121,7 +128,7 @@ fn setup_sidebar_ui_layout(mut commands: Commands) {
                                 ShapeRowMarker,
                                 Node {
                                     width: Val::Percent(100.0),
-                                    height: Val::Px(52.0),
+                                    height: Val::Px(SIDEBAR_SHAPE_ROW_HEIGHT),
                                     ..default()
                                 },
                             ));
