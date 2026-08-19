@@ -56,6 +56,7 @@ fn handle_hover_effects(
     mut commands: Commands,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    shape_row_query: Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
     mini_hourglass_query: Query<(Entity, &Transform, &ShapeButton), With<MiniHourglass>>,
     morphing_button_query: Query<(Entity, &Transform), (With<MorphingButton>, With<MiniHourglass>)>,
     random_shape_button_query: Query<
@@ -70,6 +71,13 @@ fn handle_hover_effects(
     }
     if let Ok(window) = windows.single() {
         if let Some(cursor_position) = window.cursor_position() {
+            if !shape_pointer_interactions_enabled(cursor_position, &shape_row_query) {
+                for hovered_entity in hovered_query.iter() {
+                    commands.entity(hovered_entity).remove::<HoveredHourglass>();
+                }
+                return;
+            }
+
             if let Ok((camera, camera_transform)) = camera_query.single() {
                 if let Ok(world_position) =
                     camera.viewport_to_world_2d(camera_transform, cursor_position)
@@ -292,7 +300,43 @@ fn extension_shape_row_screen_position(
     node: &ComputedNode,
     transform: &GlobalTransform,
 ) -> Option<Vec2> {
-    (!node.is_empty()).then(|| transform.translation().truncate() * node.inverse_scale_factor())
+    ui_node_logical_geometry(node, transform).map(|(center, _size)| center)
+}
+
+/// Return a UI node's center and size in the same logical viewport coordinates
+/// used by `Window::cursor_position`.
+fn ui_node_logical_geometry(
+    node: &ComputedNode,
+    transform: &GlobalTransform,
+) -> Option<(Vec2, Vec2)> {
+    (!node.is_empty()).then(|| {
+        let inverse_scale_factor = node.inverse_scale_factor();
+        (
+            transform.translation().truncate() * inverse_scale_factor,
+            node.size() * inverse_scale_factor,
+        )
+    })
+}
+
+fn shape_row_contains_cursor(
+    cursor_position: Vec2,
+    node: &ComputedNode,
+    transform: &GlobalTransform,
+) -> bool {
+    ui_node_logical_geometry(node, transform).is_some_and(|(center, size)| {
+        let offset = (cursor_position - center).abs();
+        offset.x <= size.x * 0.5 && offset.y <= size.y * 0.5
+    })
+}
+
+fn shape_pointer_interactions_enabled(
+    cursor_position: Vec2,
+    shape_row_query: &Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
+) -> bool {
+    !cfg!(feature = "chrome_extension")
+        || shape_row_query.single().is_ok_and(|(node, transform)| {
+            shape_row_contains_cursor(cursor_position, node, transform)
+        })
 }
 
 fn update_shape_panel_visibility(
@@ -474,6 +518,7 @@ fn handle_random_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    shape_row_query: Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
     random_shape_button_query: Query<&Transform, (With<RandomShapeButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
     mut pending_flip: ResMut<PendingFlip>,
@@ -487,6 +532,10 @@ fn handle_random_shape_button_clicks(
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
+                if !shape_pointer_interactions_enabled(cursor_position, &shape_row_query) {
+                    return;
+                }
+
                 if let Ok((camera, camera_transform)) = camera_query.single() {
                     if let Ok(world_position) =
                         camera.viewport_to_world_2d(camera_transform, cursor_position)
@@ -521,6 +570,7 @@ fn handle_morphing_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    shape_row_query: Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
     morphing_button_query: Query<&Transform, (With<MorphingButton>, With<MiniHourglass>)>,
     mut config: ResMut<HourglassConfig>,
     mut pending_flip: ResMut<PendingFlip>,
@@ -534,6 +584,10 @@ fn handle_morphing_button_clicks(
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
+                if !shape_pointer_interactions_enabled(cursor_position, &shape_row_query) {
+                    return;
+                }
+
                 if let Ok((camera, camera_transform)) = camera_query.single() {
                     // Convert screen coordinates to world coordinates
                     if let Ok(world_position) =
@@ -572,6 +626,7 @@ fn handle_shape_button_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    shape_row_query: Query<(&ComputedNode, &GlobalTransform), With<ShapeRowMarker>>,
     mini_hourglass_query: Query<(&Transform, &ShapeButton), With<MiniHourglass>>,
     mut config: ResMut<HourglassConfig>,
     mut pending_flip: ResMut<PendingFlip>,
@@ -585,6 +640,10 @@ fn handle_shape_button_clicks(
     if mouse_input.just_pressed(MouseButton::Left) {
         if let Ok(window) = windows.single() {
             if let Some(cursor_position) = window.cursor_position() {
+                if !shape_pointer_interactions_enabled(cursor_position, &shape_row_query) {
+                    return;
+                }
+
                 if let Ok((camera, camera_transform)) = camera_query.single() {
                     // Convert screen coordinates to world coordinates
                     if let Ok(world_position) =
@@ -718,6 +777,48 @@ mod tests {
             extension_shape_row_screen_position(&ComputedNode::default(), &transform),
             None
         );
+    }
+
+    #[test]
+    fn shape_row_hit_test_uses_logical_pixel_bounds() {
+        let node = ComputedNode {
+            size: Vec2::new(440.0, 104.0),
+            inverse_scale_factor: 0.5,
+            ..default()
+        };
+        let transform = GlobalTransform::from_translation(Vec3::new(460.0, 164.0, 0.0));
+
+        assert!(shape_row_contains_cursor(
+            Vec2::new(230.0, 82.0),
+            &node,
+            &transform
+        ));
+        assert!(shape_row_contains_cursor(
+            Vec2::new(120.0, 56.0),
+            &node,
+            &transform
+        ));
+        assert!(!shape_row_contains_cursor(
+            Vec2::new(230.0, 55.9),
+            &node,
+            &transform
+        ));
+        assert!(!shape_row_contains_cursor(
+            Vec2::new(340.1, 82.0),
+            &node,
+            &transform
+        ));
+    }
+
+    #[test]
+    fn shape_row_hit_test_rejects_empty_layout() {
+        let transform = GlobalTransform::from_translation(Vec3::new(460.0, 164.0, 0.0));
+
+        assert!(!shape_row_contains_cursor(
+            Vec2::new(230.0, 82.0),
+            &ComputedNode::default(),
+            &transform
+        ));
     }
 
     // --- shape_button_scale -----------------------------------------------
