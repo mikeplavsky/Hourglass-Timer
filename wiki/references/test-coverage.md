@@ -2,7 +2,7 @@
 
 # Test Coverage
 
-This page answers: **how well do the tests cover each feature?** The current tree has **84 regular Rust tests**, **100 Rust tests with `chrome_extension` enabled**, and **17 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
+This page answers: **how well do the tests cover each feature?** The current tree has **86 regular Rust tests**, **102 Rust tests with `chrome_extension` enabled**, and **17 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
 
 Two complementary patterns make this possible. First, arithmetic-heavy logic is extracted into free functions (`tick_countdown`, `lerp_f32`, `within_click_radius`, `pause_overlay_should_show`, …) that run without a Bevy `App` — see [[patterns#Pure helpers extracted from systems]]. Second, resource-driven systems (timer sync, button handlers, panel/overlay visibility, the first-start flip) are tested in a bare `App::new()`: spawn the entity in `Startup`, run one `app.update()`, then assert on the world. Systems that call `camera.viewport_to_world_2d(...)` can't be driven this way (the projection is unpopulated headless, so the body never runs), so their math is extracted and unit-tested instead.
 
@@ -34,7 +34,7 @@ cargo llvm-cov --no-default-features --html && open target/llvm-cov/html/index.h
 | [[src/ui/timer_panel.rs\|timer_panel.rs]] | 12 / 13 | Time adjustment, playback controls, visibility, display updates, and extension collapsed controls. |
 | [[src/resources.rs\|resources.rs]] | 10 / 10 | Default sand state, reset, duration clamps, and formatting. |
 | [[src/ui/pause_overlay.rs\|pause_overlay.rs]] | 7 / 8 | Pause visibility plus the extension's text-free overlay. |
-| [[src/ui/shape_panel.rs\|shape_panel.rs]] | 7 / 9 | Distinct shapes, button scale, fixed mini-preview sand color, extension layout anchoring, and physical-to-logical coordinate conversion. |
+| [[src/ui/shape_panel.rs\|shape_panel.rs]] | 9 / 11 | Distinct shapes, button scale, fixed mini-preview sand color, logical shape-row bounds, extension layout anchoring, and physical-to-logical coordinate conversion. |
 | [[src/timer.rs\|timer.rs]] | 8 / 8 | Semantic timer commands, zero-duration start prevention, and countdown edges. |
 | [[src/ui/mod.rs\|ui/mod.rs]] | 1 / 4 | Extension-only restart/flip gating and sidebar container/layout properties. |
 | `extension/tests/*.test.mjs` | 17 JS | Strict snapshot validation, deadlines/revisions, notification deduplication, Port heartbeats/reconnection, live-panel lifecycle, and terminal clearing. |
