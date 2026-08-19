@@ -41,7 +41,7 @@ The `?` and `∞` buttons are plain `Mesh2d` rectangles with a child `Text2d` gl
 
 ## Hover & selection feedback
 
-`handle_hover_effects` does distance-based hit testing (radius scaled by current sprite scale) and maintains a single `HoveredHourglass` tag. `update_hourglass_layering` reads that plus the current config to pick a scale: **1.3× hovered, 1.15× selected** (shape matches config, or morphing active for `∞`), else **1.0×**. The `?` button has no persistent selected state — it's a momentary action.
+`handle_hover_effects` does distance-based hit testing (radius scaled by current sprite scale) and maintains a single `HoveredHourglass` tag. In the Chrome extension, hover and click hit tests are also constrained to the computed shape-row bounds so they cannot overlap wrapped color controls. `update_hourglass_layering` reads the hover tag plus the current config to pick a scale: **1.3× hovered, 1.15× selected** (shape matches config, or morphing active for `∞`), else **1.0×**. The `?` button has no persistent selected state — it's a momentary action.
 
 ## Side effects: restart the timer and flip
 
@@ -61,7 +61,7 @@ On the Chrome extension target, all three shape actions—preset, random, and mo
 
 ## Tests
 
-7 regular tests, plus two extension-only layout tests. They cover `pick_distinct_shape`, `shape_button_scale`, the fixed mini-preview sand color, physical-to-logical coordinate conversion, and waiting for a non-empty computed layout. The hover/click *systems* call `viewport_to_world_2d`, so their hit-test geometry is extracted into `within_click_radius` (tested in [[modules/hourglass]]) rather than exercised headlessly. See [[references/test-coverage#shape_panel.rs]].
+9 regular tests, plus two extension-only layout tests. They cover `pick_distinct_shape`, `shape_button_scale`, the fixed mini-preview sand color, logical shape-row bounds, physical-to-logical coordinate conversion, and waiting for a non-empty computed layout. The hover/click *systems* call `viewport_to_world_2d`, so their circular hit-test geometry is extracted into `within_click_radius` (tested in [[modules/hourglass]]) rather than exercised headlessly. See [[references/test-coverage#shape_panel.rs]].
 
 ## Related Pages
 
