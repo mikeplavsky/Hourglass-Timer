@@ -4,7 +4,7 @@
 
 ## What It Does
 
-Makes the hourglass itself the primary control. A **click** toggles pause/play; a **drag** flips the hourglass and resets the timer to full. When a running timer is paused mid-countdown, a **"PAUSED"** overlay appears.
+Makes the hourglass itself the primary control. A **click** toggles pause/play; a **drag** flips the hourglass and restarts the timer from full. When a running timer is paused mid-countdown, a **"PAUSED"** overlay appears.
 
 ## User Journey
 
@@ -16,19 +16,19 @@ Makes the hourglass itself the primary control. A **click** toggles pause/play; 
 
 | Component | File | Role |
 |-----------|------|------|
-| click/drag | [[src/hourglass.rs\|hourglass.rs]] | `handle_hourglass_click` — distinguishes click vs. drag, toggles or flips+resets. |
+| click/drag | [[src/hourglass.rs\|hourglass.rs]] | `handle_hourglass_click` — distinguishes click vs. drag, toggles or flips+restarts. |
 | first-start flip | [[src/hourglass.rs\|hourglass.rs]] | `handle_timer_start` — flips only on the first start, unless a flip is pending. |
 | color/shape flip | [[src/hourglass.rs\|hourglass.rs]] | `apply_pending_flip` — flips the rebuilt hourglass when [[modules/resources#PendingFlip\|`PendingFlip`]] is set. |
-| drag tracking | [[src/hourglass.rs\|hourglass.rs]] | `DragState { is_dragging, start_position, drag_threshold: 10.0 }`. |
+| drag tracking | [[src/hourglass.rs\|hourglass.rs]] | `DragState { is_active, is_dragging, start_position, drag_threshold: 10.0 }`. |
 | pause banner | [[src/ui/pause_overlay.rs\|pause_overlay.rs]] | `update_pause_overlay_visibility`. |
 
 Key modules: [[modules/hourglass]], [[modules/pause-overlay]].
 
 ## Click vs. drag
 
-`handle_hourglass_click` converts the cursor to world coordinates and, on mouse-up within ~400 px of the hourglass center, checks `DragState.is_dragging`. The flag is set during the press if the cursor moved more than the 10 px `drag_threshold`. A drag calls `hourglass.flip()` + `timer_state.reset()` + start; a plain click toggles `is_running`. Full step-by-step in [[flows/click-vs-drag]].
+`handle_hourglass_click` converts the cursor to world coordinates and captures a gesture when the initial press lands on the hourglass. The captured gesture continues tracking even when the pointer leaves the scaled hourglass hit area or crosses a control, which is especially important in Chrome's narrow side panel. Moving more than the 10 px `drag_threshold` makes it an overturn; releasing then calls `hourglass.flip()` and sends `TimerCommand::Restart`. A short captured press remains a click and sends `TimerCommand::Toggle`. Full step-by-step in [[flows/click-vs-drag]].
 
-**Crucially**, the handler ignores clicks that land on controls: it skips if the cursor is over a [[modules/shape-panel|mini-hourglass sprite]] (`MiniHourglass`) or any Bevy UI button (`Interaction != None`). Without this guard, selecting a shape or color would also toggle the timer — a bug that was explicitly fixed (git history: "Stop shape selection from toggling timer pause").
+**Crucially**, the handler refuses to start a gesture if the initial press lands on a [[modules/shape-panel|mini-hourglass sprite]] (`MiniHourglass`) or any Bevy UI button (`Interaction != None`). Once a valid hourglass gesture starts, crossing a control no longer interrupts it. Without the initial guard, selecting a shape or color would also toggle the timer — a bug that was explicitly fixed (git history: "Stop shape selection from toggling timer pause").
 
 ## First-start flip
 
@@ -45,7 +45,8 @@ In the Chrome extension, changing the color or shape also flips the hourglass, s
 ## Architecture Decisions
 
 - **Threshold-based click/drag** rather than separate gestures — a single left-button interaction serves both, with 10 px disambiguating intent.
-- **Hit-test exclusion of controls** because the world-space hourglass and the control buttons overlap in screen space.
+- **Captured press-drag-release** so only the initial press must hit the hourglass; a natural overturning swipe can finish anywhere in the canvas.
+- **Hit-test exclusion of controls at gesture start** because the world-space hourglass and the control buttons overlap in screen space.
 
 ## Flow
 

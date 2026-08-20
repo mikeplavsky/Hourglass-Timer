@@ -20,7 +20,7 @@ The visual and interactive heart of the app. This module owns the *main* hourgla
 | `update_hourglass_shape` | `Update` | On shape/mode/color-mode change (Static shape mode), despawn + rebuild. |
 | `update_morphing_shape` | `Update` | In Morphing mode, rebuild each tick with an interpolated shape. |
 | `update_hourglass_timer` | `Update`, after `update_morphing_shape` | Copy `TimerState` → `Hourglass` chambers every frame. |
-| `handle_hourglass_click` | `Update` | Click = pause/play; drag = flip + reset. |
+| `handle_hourglass_click` | `Update` | Click = pause/play; drag = flip + restart. |
 | `handle_timer_start` | `Update` | Flip the hourglass on the *first* start only — unless a `PendingFlip` already owns the flip. |
 
 ## Components
@@ -84,8 +84,8 @@ The interpolation helpers are pure and tested:
 `handle_hourglass_click` (detailed in [[flows/click-vs-drag]]):
 
 - Converts cursor → world coords through the camera.
-- **Ignores clicks over controls**: skips if the cursor is over a mini-hourglass sprite button (`MiniHourglass`, radius-based) or any Bevy UI button (`Interaction != None`). Without this, selecting a shape/color would also toggle pause.
-- Within ~400 px of the hourglass center: tracks press → release. If movement exceeded the 10 px threshold it's a **drag** → flip + `timer_state.reset()` + start running. Otherwise it's a **click** → toggle `is_running`.
+- **Ignores presses over controls**: a gesture starts only if the initial press is on the main hourglass and not on a mini-hourglass sprite button (`MiniHourglass`, radius-based) or Bevy UI button (`Interaction != None`). Without this, selecting a shape/color would also toggle pause.
+- Once started, captures the gesture across the canvas instead of requiring every move and release to remain inside the scaled hit circle. If movement exceeded the 10 px threshold it's a **drag** → flip + `TimerCommand::Restart`. Otherwise it's a **click** → `TimerCommand::Toggle`.
 
 `handle_timer_start` flips the hourglass **only the first time** the timer transitions to running (tracked by a `has_ever_started` `Local`), so resuming from pause doesn't re-flip. The flag resets when the timer is reset to full. It also **defers to a pending flip**: when `PendingFlip` is set (a color/shape change is queuing its own flip on the rebuilt entity), `handle_timer_start` suppresses the first-start flip — see [[modules/hourglass#Flip-on-change orchestration|Flip-on-change orchestration]].
 
@@ -106,7 +106,7 @@ The interpolation helpers are pure and tested:
 
 ## Tests
 
-27 tests — the most of any module. Pure logic: `lerp_f32` endpoints/extrapolation, `interpolate_bulb_style` (midpoint, resolution floor, variant switch), `interpolate_neck_style` (curved, straight, both mixed directions), `get_morphed_shape_config` anchors/midpoints/wrap, and the extracted hit-test geometry `within_click_radius` / `exceeds_drag_threshold` (exclusive boundaries, scale, offset center). Headless-`App` system tests: `apply_pending_flip`, `handle_timer_start` (first-start flip, pending-flip suppression, at-rest no-op), `update_hourglass_timer` (state sync + chamber math + zero-duration guard), and `update_hourglass_color`. Still manual-only (camera/window-gated): `spawn_hourglass`, the rebuild systems, and the world-space click dispatch in `handle_hourglass_click` — see [[TESTING.md|TESTING.md]] and [[references/test-coverage#hourglass.rs]].
+31 regular tests (33 with `chrome_extension`) — the most of any module. Pure logic: `lerp_f32` endpoints/extrapolation, `interpolate_bulb_style` (midpoint, resolution floor, variant switch), `interpolate_neck_style` (curved, straight, both mixed directions), `get_morphed_shape_config` anchors/midpoints/wrap, the extracted hit-test geometry `within_click_radius` / `exceeds_drag_threshold` (exclusive boundaries, scale, offset center), and captured `DragState` click/overturn/cancel transitions. Headless-`App` system tests: `apply_pending_flip`, `handle_timer_start` (first-start flip, pending-flip suppression, at-rest no-op), `update_hourglass_timer` (state sync + chamber math + zero-duration guard), and `update_hourglass_color`. Still manual-only (camera/window-gated): `spawn_hourglass`, the rebuild systems, and the world-space press hit-test in `handle_hourglass_click` — see [[TESTING.md|TESTING.md]] and [[references/test-coverage#hourglass.rs]].
 
 ## Open Questions
 

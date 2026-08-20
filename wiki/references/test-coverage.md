@@ -2,7 +2,7 @@
 
 # Test Coverage
 
-This page answers: **how well do the tests cover each feature?** The current tree has **86 regular Rust tests**, **102 Rust tests with `chrome_extension` enabled**, and **17 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
+This page answers: **how well do the tests cover each feature?** The current tree has **90 regular Rust tests**, **106 Rust tests with `chrome_extension` enabled**, and **17 JavaScript extension tests**. They combine pure-logic unit tests, headless Bevy `App` integration tests, and dependency-free Node tests for snapshot/alarm/lifecycle behavior. Camera/window-gated input and rendered layout still require manual verification per [[TESTING.md|TESTING.md]].
 
 Two complementary patterns make this possible. First, arithmetic-heavy logic is extracted into free functions (`tick_countdown`, `lerp_f32`, `within_click_radius`, `pause_overlay_should_show`, …) that run without a Bevy `App` — see [[patterns#Pure helpers extracted from systems]]. Second, resource-driven systems (timer sync, button handlers, panel/overlay visibility, the first-start flip) are tested in a bare `App::new()`: spawn the entity in `Startup`, run one `app.update()`, then assert on the world. Systems that call `camera.viewport_to_world_2d(...)` can't be driven this way (the projection is unpopulated headless, so the body never runs), so their math is extracted and unit-tested instead.
 
@@ -29,7 +29,7 @@ cargo llvm-cov --no-default-features --html && open target/llvm-cov/html/index.h
 | File | Regular / extension | What they cover |
 |------|:-------------------:|-----------------|
 | [[src/chrome_extension.rs\|chrome_extension.rs]] | 0 / 7 | Snapshot wire format, version rejection, zero-duration restoration/serialization, absolute deadlines, expiry, and restart reconciliation. |
-| [[src/hourglass.rs\|hourglass.rs]] | 27 / 29 | Pure morph/hit-test helpers; headless flip, timer, color, and extension responsive-scale behavior. |
+| [[src/hourglass.rs\|hourglass.rs]] | 31 / 33 | Pure morph/hit-test and captured gesture-state helpers; headless flip, timer, color, and extension responsive-scale behavior. |
 | [[src/ui/color_panel.rs\|color_panel.rs]] | 12 / 12 | `color_dist_sq`, `pick_distinct_color`, `rainbow_hue`, `hsl_to_rgb`. |
 | [[src/ui/timer_panel.rs\|timer_panel.rs]] | 12 / 13 | Time adjustment, playback controls, visibility, display updates, and extension collapsed controls. |
 | [[src/resources.rs\|resources.rs]] | 10 / 10 | Default sand state, reset, duration clamps, and formatting. |
@@ -51,7 +51,7 @@ cargo llvm-cov --no-default-features --html && open target/llvm-cov/html/index.h
 | [[features/color-selection]] | 🟡 | distinct-color re-roll, `rainbow_hue`, `hsl_to_rgb`; extension-only restart/flip gating | camera-gated click handlers, splash-particle sync |
 | [[features/shape-selection]] | 🟡 | `pick_distinct_shape`, `shape_button_scale`, `within_click_radius`; extension-only restart/flip gating | camera-gated click handlers + rebuild |
 | Chrome extension state/lifecycle | 🟢 | zero-duration invariants, strict snapshots, deadlines, stale/reconnected Port handling, heartbeats, last-panel clearing, revisions, notifications | real Chrome alarm timing after device sleep |
-| [[features/hourglass-interaction]] | 🟡 | first-start flip / pending guard (`handle_timer_start`), `apply_pending_flip`, `within_click_radius`, `exceeds_drag_threshold` | world-space click/drag dispatch (`handle_hourglass_click`), control-exclusion guard |
+| [[features/hourglass-interaction]] | 🟡 | first-start flip / pending guard (`handle_timer_start`), `apply_pending_flip`, `within_click_radius`, `exceeds_drag_threshold`, captured click/overturn/cancel transitions | world-space initial press hit-test (`handle_hourglass_click`), control-exclusion guard |
 | [[features/web-build]] | 🔴 | — | build script (verified by building) |
 
 ## Notable behaviors pinned by tests
@@ -63,12 +63,13 @@ A few tests exist specifically to **document quirks**, not just to check happy p
 - `interpolate_bulb_mixed_variants_switch_at_half` — pins the hard-switch-at-0.5 behavior for mismatched bulb variants.
 - `lerp_extrapolates_outside_unit_interval` — pins that `lerp_f32` does **not** clamp.
 - `within_click_radius_boundary_is_exclusive` / `exceeds_drag_threshold_boundary_is_exclusive` — pin the strict `<` / `>` boundary (a click exactly on the radius is a *miss*; a move exactly at the threshold is still a *click*).
+- `captured_short_gesture_finishes_as_click` / `captured_gesture_finishes_as_overturn_after_crossing_threshold` — pin the captured gesture semantics that let a Chrome side-panel swipe finish after leaving the hourglass hit circle.
 - `first_start_skips_flip_when_pending` — pins that a queued color/shape flip suppresses the first-start flip, so the flip lands on the rebuilt entity via `apply_pending_flip` (see [[flows/appearance-recreation]]).
 - `update_hourglass_timer_zero_duration_leaves_chambers_default` — pins that a zero duration skips the chamber math (no divide-by-zero) rather than writing `NaN`.
 
 ## Biggest coverage gaps (where bugs could hide untested)
 
-1. **Camera-gated click dispatch** — the world-space hit-testing *inside* the click handlers (`handle_hourglass_click`, the shape/morphing/random handlers) can't run in a headless `App` because `viewport_to_world_2d` needs a populated camera projection. The geometry is extracted and tested (`within_click_radius`, `exceeds_drag_threshold`), but the surrounding dispatch — including the **control-exclusion guard** that stops shape/color clicks from toggling pause — is verified only by hand.
+1. **Camera-gated click dispatch** — the world-space hit-testing *inside* the click handlers (`handle_hourglass_click`, the shape/morphing/random handlers) can't run in a headless `App` because `viewport_to_world_2d` needs a populated camera projection. The geometry and captured gesture state are extracted and tested (`within_click_radius`, `exceeds_drag_threshold`, `DragState` transitions), but the initial press dispatch — including the **control-exclusion guard** that stops shape/color clicks from toggling pause — is verified only by hand.
 2. **Color/shape click dispatch** — extension-only restart/flip gating is unit-tested, but the camera-gated shape handlers and rendered Bevy buttons still need manual interaction testing.
 3. **Appearance recreation** — that drag/flip state survives the despawn-and-rebuild ([[flows/appearance-recreation]]), plus the rebuild throttle in `update_morphing_shape` / `update_hourglass_shape`, is untested.
 4. **`update_timer` wrapper** — the `Res<Time>` system in [[modules/timer]] is a thin delegate to the (fully tested) `tick_countdown`; the wrapper itself has no test.
