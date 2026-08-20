@@ -27,5 +27,5 @@ The core is a [[features/countdown-timer|countdown timer]] you drive by [[featur
 
 - [[flows/startup]] — `main()` → built, interactive screen
 - [[flows/countdown-tick]] — per-frame decrement → sand level → display
-- [[flows/click-vs-drag]] — resolving a single interaction into pause/play vs. flip/reset
+- [[flows/click-vs-drag]] — resolving a single interaction into pause/play vs. flip/restart
 - [[flows/appearance-recreation]] — how color/shape changes rebuild the hourglass

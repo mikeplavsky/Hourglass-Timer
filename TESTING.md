@@ -68,3 +68,17 @@ Modified the `update_hourglass_shape` function in `src/hourglass.rs` to:
 - **Color mode transitions:** Properly handled by tracking color mode changes
 - **Performance:** The fix preserves timer state and drag interaction state during recreation
 - **No regressions:** Rainbow mode continues to work with throttled updates for smooth color transitions
+
+## Chrome Extension Overturn Gesture
+
+1. Build the extension with `./build_extension.sh`, load `dist/chrome-extension` from `chrome://extensions`, and open its side panel.
+2. Start the timer, then press on the main hourglass, drag more than 10 px, and release while still over the hourglass.
+   - **Expected:** The hourglass flips, the timer returns to its configured duration, and the countdown starts immediately.
+3. Repeat, but make a longer swipe that leaves the scaled hourglass hit area before release. Release elsewhere in the black canvas, including over the appearance or timer-control region.
+   - **Expected:** The captured gesture still flips and restarts exactly once.
+4. Click the hourglass without dragging.
+   - **Expected:** The timer only toggles pause/play; it does not restart.
+5. Begin a drag outside the main hourglass and move onto it before release.
+   - **Expected:** No hourglass click or restart is triggered.
+6. Click each color, shape, and timer control.
+   - **Expected:** The control performs its own action without also toggling the hourglass through the gesture handler.

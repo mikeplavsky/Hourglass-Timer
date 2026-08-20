@@ -66,7 +66,7 @@ The build also creates `dist/hourglass-timer-extension.zip`. Timer state is reta
 
 4. **Control Playback**:
    - Click to pause/resume
-   - Drag the hourglass to flip and reset
+   - Drag from the hourglass and release anywhere in the app to flip and restart
    - Use control buttons for precise start/pause/reset
 
 ## License

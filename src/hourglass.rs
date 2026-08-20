@@ -48,18 +48,61 @@ pub struct MainHourglass;
 
 #[derive(Component, Default, Clone)]
 struct DragState {
+    is_active: bool,
     is_dragging: bool,
     start_position: Vec2,
     drag_threshold: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HourglassGesture {
+    Click,
+    Overturn,
+}
+
 impl DragState {
     fn new() -> Self {
         Self {
+            is_active: false,
             is_dragging: false,
             start_position: Vec2::ZERO,
             drag_threshold: 10.0, // Minimum distance in pixels to consider it a drag
         }
+    }
+
+    fn begin(&mut self, position: Vec2) {
+        self.is_active = true;
+        self.is_dragging = false;
+        self.start_position = position;
+    }
+
+    fn track(&mut self, position: Vec2) {
+        if self.is_active
+            && !self.is_dragging
+            && exceeds_drag_threshold(self.start_position, position, self.drag_threshold)
+        {
+            self.is_dragging = true;
+        }
+    }
+
+    fn finish(&mut self) -> Option<HourglassGesture> {
+        if !self.is_active {
+            return None;
+        }
+
+        let gesture = if self.is_dragging {
+            HourglassGesture::Overturn
+        } else {
+            HourglassGesture::Click
+        };
+        self.cancel();
+        Some(gesture)
+    }
+
+    fn cancel(&mut self) {
+        self.is_active = false;
+        self.is_dragging = false;
+        self.start_position = Vec2::ZERO;
     }
 }
 
@@ -518,90 +561,74 @@ fn handle_hourglass_click(
     >,
     ui_interaction_query: Query<&Interaction>,
 ) {
-    if let Ok(window) = windows.single() {
-        if let Some(cursor_position) = window.cursor_position() {
-            if let Ok((camera, camera_transform)) = camera_query.single() {
-                if let Ok((hourglass_transform, mut drag_state, mut hourglass)) =
-                    hourglass_query.single_mut()
-                {
-                    // Convert screen coordinates to world coordinates
-                    if let Ok(world_position) =
-                        camera.viewport_to_world_2d(camera_transform, cursor_position)
-                    {
-                        // Don't treat clicks on controls as hourglass clicks, otherwise
-                        // selecting a shape/color would also toggle the timer's pause state.
+    let (Ok(window), Ok((camera, camera_transform))) = (windows.single(), camera_query.single())
+    else {
+        return;
+    };
+    let Ok((hourglass_transform, mut drag_state, mut hourglass)) = hourglass_query.single_mut()
+    else {
+        return;
+    };
 
-                        // Sprite buttons (shape/morphing/random) carry MiniHourglass.
-                        let over_mini_button =
-                            mini_button_query.iter().any(|(transform, visibility)| {
-                                *visibility != Visibility::Hidden
-                                    && within_click_radius(
-                                        world_position,
-                                        transform.translation.truncate(),
-                                        30.0,
-                                        transform.scale.x,
-                                    )
-                            });
+    let cursor_position = window.cursor_position();
+    let world_position = cursor_position
+        .and_then(|position| camera.viewport_to_world_2d(camera_transform, position).ok());
 
-                        // Bevy UI buttons (color row + timer panel) use Interaction.
-                        let over_ui_button = ui_interaction_query
-                            .iter()
-                            .any(|interaction| *interaction != Interaction::None);
+    // Only the initial press must hit the hourglass. Once captured, continue
+    // tracking the gesture anywhere in the canvas so a natural swipe in the
+    // narrow Chrome side panel does not lose its release at the hit boundary.
+    if mouse_input.just_pressed(MouseButton::Left) {
+        drag_state.cancel();
 
-                        if over_mini_button || over_ui_button {
-                            return;
-                        }
+        if let (Some(cursor_position), Some(world_position)) = (cursor_position, world_position) {
+            // Don't start an hourglass gesture on controls, otherwise selecting
+            // a shape/color would also toggle the timer's pause state.
+            let over_mini_button = mini_button_query.iter().any(|(transform, visibility)| {
+                *visibility != Visibility::Hidden
+                    && within_click_radius(
+                        world_position,
+                        transform.translation.truncate(),
+                        30.0,
+                        transform.scale.x,
+                    )
+            });
+            let over_ui_button = ui_interaction_query
+                .iter()
+                .any(|interaction| *interaction != Interaction::None);
+            let hourglass_pos = hourglass_transform.translation.truncate();
+            let over_hourglass = world_position.distance(hourglass_pos)
+                < main_hourglass_hit_radius(hourglass_transform.scale.x);
 
-                        // Check if interaction is within hourglass bounds (approximate 400x400 area)
-                        let hourglass_pos = hourglass_transform.translation.truncate();
-                        let distance = world_position.distance(hourglass_pos);
-
-                        if distance < main_hourglass_hit_radius(hourglass_transform.scale.x) {
-                            // Larger area to cover most of the hourglass
-                            // Handle mouse down - start potential drag
-                            if mouse_input.just_pressed(MouseButton::Left) {
-                                drag_state.start_position = cursor_position;
-                                drag_state.is_dragging = false;
-                            }
-
-                            // Handle mouse movement during press - detect drag
-                            if mouse_input.pressed(MouseButton::Left)
-                                && !drag_state.is_dragging
-                                && exceeds_drag_threshold(
-                                    drag_state.start_position,
-                                    cursor_position,
-                                    drag_state.drag_threshold,
-                                )
-                            {
-                                drag_state.is_dragging = true;
-                            }
-
-                            // Handle mouse up - complete action
-                            if mouse_input.just_released(MouseButton::Left) {
-                                if drag_state.is_dragging {
-                                    // Drag detected - flip and reset hourglass
-                                    if hourglass.can_flip() {
-                                        // Immediately set chambers to initial state (all sand in bottom)
-                                        hourglass.upper_chamber = 0.0;
-                                        hourglass.lower_chamber = 1.0;
-
-                                        // Then trigger the flip animation
-                                        hourglass.flip();
-                                        timer_commands.write(TimerCommand::Restart);
-                                    }
-                                } else {
-                                    // Simple click - toggle pause/play
-                                    timer_commands.write(TimerCommand::Toggle);
-                                }
-
-                                // Reset drag state
-                                drag_state.is_dragging = false;
-                                drag_state.start_position = Vec2::ZERO;
-                            }
-                        }
-                    }
-                }
+            if over_hourglass && !over_mini_button && !over_ui_button {
+                drag_state.begin(cursor_position);
             }
+        }
+    }
+
+    if drag_state.is_active {
+        if let Some(cursor_position) = cursor_position {
+            drag_state.track(cursor_position);
+        }
+
+        if mouse_input.just_released(MouseButton::Left) {
+            match drag_state.finish() {
+                Some(HourglassGesture::Overturn) if hourglass.can_flip() => {
+                    // Start with all sand in the bottom so the crate's chamber
+                    // swap at the end of the flip leaves the top full.
+                    hourglass.upper_chamber = 0.0;
+                    hourglass.lower_chamber = 1.0;
+                    hourglass.flip();
+                    timer_commands.write(TimerCommand::Restart);
+                }
+                Some(HourglassGesture::Click) => {
+                    timer_commands.write(TimerCommand::Toggle);
+                }
+                _ => {}
+            }
+        } else if !mouse_input.pressed(MouseButton::Left) {
+            // Recover cleanly if the browser drops a release while the pointer
+            // leaves the canvas or the side panel loses focus.
+            drag_state.cancel();
         }
     }
 }
@@ -1250,6 +1277,49 @@ mod tests {
     fn exceeds_drag_threshold_zero_movement_is_click() {
         let p = Vec2::new(42.0, 7.0);
         assert!(!exceeds_drag_threshold(p, p, 10.0));
+    }
+
+    // --- DragState ---------------------------------------------------------
+
+    #[test]
+    fn captured_short_gesture_finishes_as_click() {
+        let mut state = DragState::new();
+        state.begin(Vec2::new(100.0, 100.0));
+        state.track(Vec2::new(106.0, 100.0));
+
+        assert_eq!(state.finish(), Some(HourglassGesture::Click));
+        assert!(!state.is_active);
+    }
+
+    #[test]
+    fn captured_gesture_finishes_as_overturn_after_crossing_threshold() {
+        let mut state = DragState::new();
+        state.begin(Vec2::new(100.0, 100.0));
+        state.track(Vec2::new(111.0, 100.0));
+
+        assert_eq!(state.finish(), Some(HourglassGesture::Overturn));
+        assert!(!state.is_active);
+        assert!(!state.is_dragging);
+    }
+
+    #[test]
+    fn movement_without_captured_press_never_becomes_a_gesture() {
+        let mut state = DragState::new();
+        state.track(Vec2::new(100.0, 100.0));
+
+        assert!(!state.is_dragging);
+        assert_eq!(state.finish(), None);
+    }
+
+    #[test]
+    fn cancel_discards_captured_gesture() {
+        let mut state = DragState::new();
+        state.begin(Vec2::new(100.0, 100.0));
+        state.track(Vec2::new(111.0, 100.0));
+        state.cancel();
+
+        assert_eq!(state.finish(), None);
+        assert_eq!(state.start_position, Vec2::ZERO);
     }
 
     // --- apply_pending_flip -----------------------------------------------
